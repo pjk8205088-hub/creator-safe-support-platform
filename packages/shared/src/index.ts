@@ -1,10 +1,34 @@
 import { z } from 'zod';
-export const Role = z.enum(['FAN','CREATOR','ADMIN']);
+
+export const Role = z.enum(['FAN', 'CREATOR', 'ADMIN']);
 export type Role = z.infer<typeof Role>;
-export const MoneySchema = z.object({ amount: z.number().int().positive(), currency: z.literal('KRW') });
-export const GiftStatus = z.enum(['PENDING_PAYMENT','PAID','ORDERED','SHIPPED','DELIVERED','CANCELLED','REFUNDED']);
+
+export const MoneySchema = z.object({
+  amount: z.number().int().positive(),
+  currency: z.literal('KRW')
+});
+
+export const GiftStatus = z.enum(['PENDING_PAYMENT', 'PAID', 'ORDERED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']);
 export type GiftStatus = z.infer<typeof GiftStatus>;
-export const CreateSupportSchema = z.object({ creatorId:z.string().min(1), wishlistItemId:z.string().optional(), supporterName:z.string().min(1).max(30), message:z.string().max(500).optional(), amount:z.number().int().min(1000), paymentProvider:z.enum(['TOSS','KAKAO_PAY','PORTONE','MOCK']) });
+
+export const CreateSupportSchema = z.object({
+  creatorId: z.string().min(1),
+  wishlistItemId: z.string().optional(),
+  supporterName: z.string().min(1).max(30),
+  message: z.string().max(500).optional(),
+  amount: z.number().int().min(1000),
+  paymentProvider: z.enum(['TOSS', 'KAKAO_PAY', 'PORTONE', 'MOCK'])
+});
 export type CreateSupportInput = z.infer<typeof CreateSupportSchema>;
-export const CreatorProfileSchema = z.object({ displayName:z.string(), slug:z.string(), bio:z.string(), links:z.array(z.string()).default([]) });
-export const maskAddress = (address:string)=> address.replace(/(동|로|길).*/,'$1 ****').replace(/[0-9]{2,}/g,'**');
+
+export const CreatorProfileSchema = z.object({
+  displayName: z.string(),
+  slug: z.string(),
+  bio: z.string(),
+  links: z.array(z.string()).default([])
+});
+
+export const maskAddress = (address: string) =>
+  address
+    .replace(/(\S+(?:시|도)\s+\S+(?:구|군|시)).*/, '$1 ****')
+    .replace(/[0-9]{2,}/g, '**');
