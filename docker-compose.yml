@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cssp
+      POSTGRES_PASSWORD: cssp
+      POSTGRES_DB: cssp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  api:
+    build: ./apps/api
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://cssp:cssp@postgres:5432/cssp?schema=public
+      JWT_SECRET: local-secret
+      WEB_ORIGIN: http://localhost:5173
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+volumes:
+  pgdata:

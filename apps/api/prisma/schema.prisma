@@ -1,0 +1,9 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+enum Role { FAN CREATOR ADMIN }
+enum GiftStatus { PENDING_PAYMENT PAID ORDERED SHIPPED DELIVERED CANCELLED REFUNDED }
+model User { id String @id @default(cuid()) email String @unique passwordHash String? role Role @default(FAN) displayName String createdAt DateTime @default(now()) updatedAt DateTime @updatedAt creatorProfile CreatorProfile? supports Support[] }
+model CreatorProfile { id String @id @default(cuid()) userId String @unique slug String @unique bio String @default("") safeAddressMemo String? user User @relation(fields:[userId], references:[id]) wishlist WishlistItem[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
+model WishlistItem { id String @id @default(cuid()) creatorId String title String imageUrl String? sourceUrl String? price Int priority Int @default(0) isActive Boolean @default(true) creator CreatorProfile @relation(fields:[creatorId], references:[id]) supports Support[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
+model Support { id String @id @default(cuid()) creatorId String wishlistItemId String? fanId String? supporterName String message String? amount Int status GiftStatus @default(PENDING_PAYMENT) paymentProvider String paymentKey String? createdAt DateTime @default(now()) updatedAt DateTime @updatedAt fan User? @relation(fields:[fanId], references:[id]) wishlistItem WishlistItem? @relation(fields:[wishlistItemId], references:[id]) }
+model Report { id String @id @default(cuid()) targetType String targetId String reason String status String @default("OPEN") createdAt DateTime @default(now()) }
