@@ -30,6 +30,15 @@ type Category = {
   wishlistCount: number;
 };
 
+type WishlistItem = {
+  id: string;
+  title: string;
+  price: number;
+  categoryId: string;
+  imageUrl: string;
+  note: string;
+};
+
 type Creator = {
   id: string;
   slug: string;
@@ -42,14 +51,7 @@ type Creator = {
   coverUrl: string;
   addressMasked?: string;
   category?: Category;
-  wishlist: {
-    id: string;
-    title: string;
-    price: number;
-    categoryId: string;
-    imageUrl: string;
-    note: string;
-  }[];
+  wishlist: WishlistItem[];
 };
 
 type Support = {
@@ -75,14 +77,180 @@ type Session = {
   user: SessionUser;
 };
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+type SupportForm = {
+  supporterName: string;
+  message: string;
+  amount: number;
+  paymentProvider: 'MOCK';
+};
+
+const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ? 'http://localhost:4000' : '');
 const sessionKey = 'cssp-session';
+const supportKey = 'cssp-demo-supports';
+
+const demoCategories: Category[] = [
+  {
+    id: 'streaming',
+    name: 'Streaming Gear',
+    description: '방송 장비, 조명, 마이크처럼 팬이 바로 응원하기 좋은 아이템',
+    imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=900',
+    featured: true,
+    creatorCount: 1,
+    wishlistCount: 2
+  },
+  {
+    id: 'lifestyle',
+    name: 'Lifestyle',
+    description: '카페, 건강, 데스크 셋업 등 크리에이터의 일상을 지켜주는 선물',
+    imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=900',
+    featured: true,
+    creatorCount: 1,
+    wishlistCount: 1
+  },
+  {
+    id: 'beauty',
+    name: 'Beauty',
+    description: '뷰티 촬영, 리뷰 콘텐츠, 셀프 케어에 맞춘 위시리스트',
+    imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900',
+    creatorCount: 1,
+    wishlistCount: 1
+  },
+  {
+    id: 'digital',
+    name: 'Digital',
+    description: '구독권, 소프트웨어, 디지털 작업 도구를 위한 후원',
+    imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900',
+    creatorCount: 1,
+    wishlistCount: 1
+  }
+];
+
+const demoCreators: Creator[] = [
+  {
+    id: 'cr_1',
+    slug: 'hana',
+    displayName: '하나 스튜디오',
+    handle: '@hana.studio',
+    bio: '일상, 뷰티, 데스크 셋업 콘텐츠를 만드는 크리에이터입니다.',
+    categoryId: 'lifestyle',
+    platform: 'YouTube',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300',
+    coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200',
+    addressMasked: '서울특별시 강남구 ****',
+    wishlist: [
+      {
+        id: 'wi_1',
+        title: '촬영용 무드 조명',
+        price: 49000,
+        categoryId: 'streaming',
+        imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
+        note: '밤 촬영 때 화면 톤을 안정적으로 맞추고 싶어요.'
+      },
+      {
+        id: 'wi_2',
+        title: '카페 작업 후원',
+        price: 15000,
+        categoryId: 'lifestyle',
+        imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
+        note: '편집하는 날 커피 한 잔으로 힘을 보탤 수 있어요.'
+      }
+    ]
+  },
+  {
+    id: 'cr_2',
+    slug: 'min-games',
+    displayName: '민 게임즈',
+    handle: '@mingames',
+    bio: '게임 방송과 리뷰를 진행하며 안전한 선물 문화를 만들고 있습니다.',
+    categoryId: 'streaming',
+    platform: 'Twitch',
+    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
+    coverUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200',
+    addressMasked: '부산광역시 해운대구 ****',
+    wishlist: [
+      {
+        id: 'wi_3',
+        title: '방송 소품 후원',
+        price: 30000,
+        categoryId: 'streaming',
+        imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
+        note: '방송 배경을 더 깔끔하게 꾸미는 데 사용합니다.'
+      },
+      {
+        id: 'wi_4',
+        title: '게임 리뷰 구독권',
+        price: 22000,
+        categoryId: 'digital',
+        imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
+        note: '신작 리뷰 콘텐츠 제작에 도움이 됩니다.'
+      }
+    ]
+  },
+  {
+    id: 'cr_3',
+    slug: 'yuri-beauty',
+    displayName: '유리 뷰티',
+    handle: '@yuri.beauty',
+    bio: '스킨케어와 메이크업 루틴을 소개하는 뷰티 크리에이터입니다.',
+    categoryId: 'beauty',
+    platform: 'Instagram',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+    coverUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200',
+    addressMasked: '경기도 성남시 분당구 ****',
+    wishlist: [
+      {
+        id: 'wi_5',
+        title: '뷰티 촬영 배경지',
+        price: 18000,
+        categoryId: 'beauty',
+        imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800',
+        note: '제품 컬러가 잘 보이는 촬영 배경을 준비하려고 해요.'
+      }
+    ]
+  }
+];
+
+function readStoredSupports() {
+  try {
+    return JSON.parse(localStorage.getItem(supportKey) || '[]') as Support[];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredSupports(supports: Support[]) {
+  localStorage.setItem(supportKey, JSON.stringify(supports));
+}
+
+async function getJson<T>(path: string, fallback: T): Promise<T> {
+  if (!API) return fallback;
+  try {
+    const response = await fetch(`${API}${path}`);
+    if (!response.ok) return fallback;
+    return (await response.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function createDemoSession(name: string, email: string, role: 'FAN' | 'CREATOR' = 'CREATOR'): Session {
+  return {
+    token: `demo_${Date.now()}`,
+    user: {
+      id: `demo_${Date.now()}`,
+      name,
+      email,
+      role,
+      creatorSlug: role === 'CREATOR' ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : undefined
+    }
+  };
+}
 
 function App() {
   const [page, setPage] = useState(location.hash.replace('#', '') || 'home');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [creators, setCreators] = useState<Creator[]>([]);
-  const [supports, setSupports] = useState<Support[]>([]);
+  const [categories, setCategories] = useState<Category[]>(demoCategories);
+  const [creators, setCreators] = useState<Creator[]>(demoCreators);
+  const [supports, setSupports] = useState<Support[]>(readStoredSupports);
   const [selected, setSelected] = useState<Creator | null>(null);
   const [session, setSession] = useState<Session | null>(() => {
     const raw = localStorage.getItem(sessionKey);
@@ -94,7 +262,7 @@ function App() {
       return null;
     }
   });
-  const [supportForm, setSupportForm] = useState({
+  const [supportForm, setSupportForm] = useState<SupportForm>({
     supporterName: '응원하는 팬',
     message: '늘 좋은 콘텐츠 고마워요!',
     amount: 15000,
@@ -102,22 +270,22 @@ function App() {
   });
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    const onHashChange = () => setPage(location.hash.replace('#', '') || 'home');
-    addEventListener('hashchange', onHashChange);
-    return () => removeEventListener('hashchange', onHashChange);
-  }, []);
-
   const load = async () => {
     const [categoryData, creatorData, supportData] = await Promise.all([
-      fetch(`${API}/api/categories`).then(res => res.json()).catch(() => []),
-      fetch(`${API}/api/creators`).then(res => res.json()).catch(() => []),
-      fetch(`${API}/api/supports`).then(res => res.json()).catch(() => [])
+      getJson<Category[]>('/api/categories', demoCategories),
+      getJson<Creator[]>('/api/creators', demoCreators),
+      getJson<Support[]>('/api/supports', readStoredSupports())
     ]);
     setCategories(categoryData);
     setCreators(creatorData);
     setSupports(supportData);
   };
+
+  useEffect(() => {
+    const onHashChange = () => setPage(location.hash.replace('#', '') || 'home');
+    addEventListener('hashchange', onHashChange);
+    return () => removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     load();
@@ -129,10 +297,7 @@ function App() {
       return;
     }
     const slug = page.split('/')[1];
-    fetch(`${API}/api/creators/${slug}`)
-      .then(res => res.json())
-      .then(setSelected)
-      .catch(() => setSelected(null));
+    getJson<Creator | null>(`/api/creators/${slug}`, demoCreators.find(creator => creator.slug === slug) ?? null).then(setSelected);
   }, [page]);
 
   useEffect(() => {
@@ -162,19 +327,35 @@ function App() {
       wishlistItemId: itemId,
       amount: Number(supportForm.amount)
     };
-    const res = await fetch(`${API}/api/supports`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (res.ok) {
-      await load();
-      location.hash = 'success';
+    if (API) {
+      const response = await fetch(`${API}/api/supports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).catch(() => null);
+      if (response?.ok) {
+        await load();
+        location.hash = 'success';
+        return;
+      }
     }
+    const support: Support = {
+      id: `sp_${Date.now()}`,
+      creatorId: selected.id,
+      supporterName: body.supporterName,
+      message: body.message,
+      amount: body.amount,
+      status: 'PAID',
+      createdAt: new Date().toISOString()
+    };
+    const nextSupports = [support, ...supports];
+    saveStoredSupports(nextSupports);
+    setSupports(nextSupports);
+    location.hash = 'success';
   }
 
   async function logout() {
-    if (session?.token) {
+    if (API && session?.token) {
       await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }).catch(
         () => null
       );
@@ -187,13 +368,7 @@ function App() {
     <main>
       <Nav session={session} onLogout={logout} />
       {page === 'home' && (
-        <Home
-          categories={categories}
-          creators={visibleCreators}
-          query={searchQuery}
-          setQuery={setSearchQuery}
-          session={session}
-        />
+        <Home categories={categories} creators={visibleCreators} query={searchQuery} setQuery={setSearchQuery} session={session} />
       )}
       {(page === 'categories' || page.startsWith('category/')) && (
         <Catalog
@@ -205,12 +380,7 @@ function App() {
         />
       )}
       {page.startsWith('creator/') && selected && (
-        <CreatorPage
-          creator={selected}
-          form={supportForm}
-          setForm={setSupportForm}
-          submitSupport={submitSupport}
-        />
+        <CreatorPage creator={selected} form={supportForm} setForm={setSupportForm} submitSupport={submitSupport} />
       )}
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
@@ -437,13 +607,18 @@ function CreatorPage({
   submitSupport
 }: {
   creator: Creator;
-  form: { supporterName: string; message: string; amount: number; paymentProvider: string };
-  setForm: (value: { supporterName: string; message: string; amount: number; paymentProvider: string }) => void;
+  form: SupportForm;
+  setForm: (value: SupportForm) => void;
   submitSupport: (itemId?: string) => void;
 }) {
   return (
     <section className="page-shell">
-      <div className="profile-hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(12,18,32,.78), rgba(12,18,32,.16)), url(${creator.coverUrl})` }}>
+      <div
+        className="profile-hero"
+        style={{
+          backgroundImage: `linear-gradient(90deg, rgba(12,18,32,.78), rgba(12,18,32,.16)), url(${creator.coverUrl})`
+        }}
+      >
         <img className="profile-avatar" src={creator.avatarUrl} alt="" />
         <span className="eyebrow">
           <ShieldCheck size={16} />
@@ -533,55 +708,49 @@ function AuthPage({
     event.preventDefault();
     setBusy(true);
     setError('');
-    const path = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
-    const payload = mode === 'login' ? { email, password } : { name, email, password, role };
-    const res = await fetch(`${API}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(() => null);
+
+    if (API) {
+      const path = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+      const payload = mode === 'login' ? { email, password } : { name, email, password, role };
+      const response = await fetch(`${API}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => null);
+      if (response?.ok) {
+        setSession((await response.json()) as Session);
+        location.hash = 'dashboard';
+        return;
+      }
+    }
+
     setBusy(false);
-    if (!res) {
-      setError('서버에 연결할 수 없습니다.');
+    if (mode === 'login' && email !== 'creator@example.com' && password.length < 8) {
+      setError('이메일과 비밀번호를 확인해주세요.');
       return;
     }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.code === 'EMAIL_ALREADY_EXISTS' ? '이미 가입된 이메일입니다.' : '입력 정보를 확인해주세요.');
-      return;
-    }
-    const data = (await res.json()) as Session;
-    setSession(data);
+    setSession(createDemoSession(mode === 'login' ? '하나 스튜디오' : name || '새 크리에이터', email, role));
     location.hash = 'dashboard';
   }
 
   async function socialDemo(provider: string) {
-    const demoEmail = `${provider.toLowerCase()}@safewish.local`;
     setBusy(true);
     setError('');
-    const login = await fetch(`${API}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: demoEmail, password: 'password123' })
-    }).catch(() => null);
-    if (login?.ok) {
-      const data = (await login.json()) as Session;
-      setSession(data);
-      location.hash = 'dashboard';
-      return;
+    const demoEmail = `${provider.toLowerCase()}@safewish.local`;
+    if (API) {
+      const response = await fetch(`${API}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${provider} 데모`, email: demoEmail, password: 'password123', role: 'CREATOR' })
+      }).catch(() => null);
+      if (response?.ok) {
+        setSession((await response.json()) as Session);
+        location.hash = 'dashboard';
+        return;
+      }
     }
-    const signup = await fetch(`${API}/api/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: `${provider} 데모`, email: demoEmail, password: 'password123', role: 'CREATOR' })
-    }).catch(() => null);
     setBusy(false);
-    if (!signup?.ok) {
-      setError('소셜 데모 계정을 만들 수 없습니다.');
-      return;
-    }
-    const data = (await signup.json()) as Session;
-    setSession(data);
+    setSession(createDemoSession(`${provider} 데모`, demoEmail));
     location.hash = 'dashboard';
   }
 
