@@ -88,6 +88,22 @@ const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ?
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 
+const businessInfo = {
+  shopName: '행성몰',
+  serviceName: 'SafeWish',
+  representative: '예은',
+  businessNumber: '168-06-03440',
+  address: '전북특별자치도 부안군 줄포면 부안로 911-16',
+  businessType: '도매 및 소매업',
+  businessItem: '전자상거래 소매 중개업',
+  openingDate: '2026.07.09',
+  customerCenter: 'PG 신청서 기재 연락처로 교체 필요',
+  email: 'support@safewish.kr',
+  mailOrderNumber: '구매안전서비스 확인증 발급 후 통신판매업 신고번호 기재',
+  hostingProvider: 'GitHub Pages',
+  pgProvider: 'NICEPAY'
+};
+
 const demoCategories: Category[] = [
   {
     id: 'streaming',
@@ -387,6 +403,8 @@ function App() {
       {page === 'success' && <Success />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
       {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} />}
+      {page === 'business' && <BusinessPage />}
+      {page === 'policies' && <PolicyPage />}
       <Footer />
     </main>
   );
@@ -402,6 +420,8 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
       <div className="nav-links">
         <a href="#categories">카테고리</a>
         <a href="#dashboard">대시보드</a>
+        <a href="#business">사업자정보</a>
+        <a href="#policies">약관/환불</a>
         <a href="#admin">관리</a>
       </div>
       <div className="nav-actions">
@@ -485,11 +505,55 @@ function Home({
       <section className="content-band">
         <div className="steps">
           <Step icon={<Grid3X3 />} title="위시리스트 구성" text="카테고리별 아이템을 모아 공개 페이지로 공유합니다." />
-          <Step icon={<CreditCard />} title="안전 결제" text="팬은 선택한 선물이나 금액을 mock 결제 흐름으로 후원합니다." />
+          <Step icon={<CreditCard />} title="안전 결제" text="팬은 선택한 선물이나 금액을 카드 및 간편결제로 후원할 수 있습니다." />
           <Step icon={<Bell />} title="도착 알림" text="후원 내역과 알림이 대시보드에 바로 쌓입니다." />
         </div>
       </section>
+      <ReviewReadySection />
     </>
+  );
+}
+
+function ReviewReadySection() {
+  return (
+    <section className="content-band review-ready">
+      <div className="section-head">
+        <div>
+          <span className="kicker">NICEPAY REVIEW READY</span>
+          <h2>결제 심사 필수 운영 정보</h2>
+          <p>
+            사업자등록증 기준 정보, 고객 안내, 환불/취소 기준을 사이트 안에서 바로 확인할 수 있도록 정리했습니다.
+          </p>
+        </div>
+        <a className="solid-button" href="#business">
+          사업자정보 확인
+          <ArrowRight size={16} />
+        </a>
+      </div>
+      <div className="review-grid">
+        <article>
+          <ShieldCheck size={22} />
+          <h3>사업자 정보 공개</h3>
+          <p>
+            상호, 대표자, 사업자등록번호, 주소, 업태/종목을 사업자등록증과 동일하게 표시합니다.
+          </p>
+        </article>
+        <article>
+          <CreditCard size={22} />
+          <h3>결제/주문 안내</h3>
+          <p>
+            상품 또는 후원 금액, 결제 수단, 결제 완료 후 제공 방식과 주문 확인 방법을 안내합니다.
+          </p>
+        </article>
+        <article>
+          <HeartHandshake size={22} />
+          <h3>환불/고객센터</h3>
+          <p>
+            취소 및 환불 기준, 문의 이메일, 고객센터 정보를 별도 정책 페이지와 푸터에 노출합니다.
+          </p>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -651,6 +715,7 @@ function CreatorPage({
               </article>
             ))}
           </div>
+          <ProductNotice />
         </div>
         <form
           className="support-panel"
@@ -680,9 +745,39 @@ function CreatorPage({
           </label>
           <button className="solid-button large" type="submit">
             <WalletCards size={18} />
-            결제 완료 처리
+            결제하기
           </button>
         </form>
+      </div>
+    </section>
+  );
+}
+
+function ProductNotice() {
+  return (
+    <section className="commerce-notice" aria-label="구매 및 환불 안내">
+      <h2>구매 및 환불 안내</h2>
+      <div className="notice-grid">
+        <div>
+          <b>상품/서비스 제공</b>
+          <p>후원 또는 선물 결제 완료 후 크리에이터 대시보드에 주문 내역이 즉시 생성됩니다.</p>
+        </div>
+        <div>
+          <b>배송 안내</b>
+          <p>실물 선물은 판매자 확인 후 개별 배송되며, 배송이 필요한 상품은 상세 안내에 따라 처리됩니다.</p>
+        </div>
+        <div>
+          <b>취소/환불</b>
+          <p>결제 당일 미처리 주문은 고객센터 접수 후 취소할 수 있습니다. 제공 또는 배송이 시작된 경우 전자상거래법과 개별 상품 고지 기준을 따릅니다.</p>
+        </div>
+        <div>
+          <b>문의</b>
+          <p>
+            고객센터: {businessInfo.customerCenter}
+            <br />
+            이메일: {businessInfo.email}
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -946,8 +1041,161 @@ function Success() {
   );
 }
 
+function BusinessPage() {
+  return (
+    <section className="page-shell legal-page">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Business Information</span>
+          <h1>사업자 정보</h1>
+          <p>PG 및 카드사 심사를 위해 사업자등록증 기준 정보를 공개합니다.</p>
+        </div>
+      </div>
+      <div className="business-card">
+        <dl>
+          <div>
+            <dt>상호</dt>
+            <dd>{businessInfo.shopName}</dd>
+          </div>
+          <div>
+            <dt>서비스명</dt>
+            <dd>{businessInfo.serviceName}</dd>
+          </div>
+          <div>
+            <dt>대표자</dt>
+            <dd>{businessInfo.representative}</dd>
+          </div>
+          <div>
+            <dt>사업자등록번호</dt>
+            <dd>{businessInfo.businessNumber}</dd>
+          </div>
+          <div>
+            <dt>사업장 주소</dt>
+            <dd>{businessInfo.address}</dd>
+          </div>
+          <div>
+            <dt>업태</dt>
+            <dd>{businessInfo.businessType}</dd>
+          </div>
+          <div>
+            <dt>종목</dt>
+            <dd>{businessInfo.businessItem}</dd>
+          </div>
+          <div>
+            <dt>개업일</dt>
+            <dd>{businessInfo.openingDate}</dd>
+          </div>
+          <div>
+            <dt>통신판매업 신고번호</dt>
+            <dd>{businessInfo.mailOrderNumber}</dd>
+          </div>
+          <div>
+            <dt>고객센터</dt>
+            <dd>{businessInfo.customerCenter}</dd>
+          </div>
+          <div>
+            <dt>이메일</dt>
+            <dd>{businessInfo.email}</dd>
+          </div>
+          <div>
+            <dt>호스팅 제공</dt>
+            <dd>{businessInfo.hostingProvider}</dd>
+          </div>
+          <div>
+            <dt>결제대행 예정</dt>
+            <dd>{businessInfo.pgProvider}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="callout warning-callout">
+        <b>심사 전 확인 필요</b>
+        <p>
+          고객센터 번호와 통신판매업 신고번호는 사업자등록증 이미지에서 확인되지 않았습니다. NICEPAY 신청서에 제출하는 실제 연락처와
+          신고번호로 교체해야 심사 반려 가능성을 줄일 수 있습니다.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PolicyPage() {
+  return (
+    <section className="page-shell legal-page">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Policies</span>
+          <h1>이용약관 및 환불 정책</h1>
+          <p>주문, 결제, 개인정보, 환불 기준을 한 페이지에서 확인할 수 있습니다.</p>
+        </div>
+      </div>
+      <div className="policy-grid">
+        <article>
+          <h2>이용약관</h2>
+          <p>
+            SafeWish는 크리에이터 후원 및 선물 주문을 중개하는 서비스입니다. 이용자는 표시된 금액과 상품 정보를 확인한 뒤 결제하며,
+            결제 완료 후 주문 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
+          </p>
+          <p>
+            부정 사용, 타인의 권리 침해, 허위 주문, 결제수단 도용이 확인되는 경우 서비스 이용이 제한될 수 있습니다.
+          </p>
+        </article>
+        <article>
+          <h2>개인정보처리방침</h2>
+          <p>
+            회원가입, 주문 처리, 결제 확인, 고객 상담을 위해 이름, 이메일, 주문/결제 정보, 문의 내용을 수집할 수 있습니다.
+            수집한 정보는 서비스 제공과 법령상 보관 의무 이행 목적에 한해 사용합니다.
+          </p>
+          <p>
+            결제 처리는 NICEPAY 등 결제대행사를 통해 진행되며, 카드번호 등 민감 결제정보는 본 서비스가 직접 저장하지 않습니다.
+          </p>
+        </article>
+        <article>
+          <h2>취소 및 환불 정책</h2>
+          <p>
+            결제 당일 아직 처리되지 않은 주문은 고객센터 접수 후 취소할 수 있습니다. 이미 크리에이터에게 전달되었거나 실물 배송이 시작된
+            주문은 상품 성격, 제공 상태, 전자상거래 관련 법령에 따라 환불 가능 여부가 달라질 수 있습니다.
+          </p>
+          <p>환불 요청은 주문번호, 결제자명, 연락처, 요청 사유를 포함해 고객센터로 접수해 주세요.</p>
+        </article>
+        <article>
+          <h2>배송 및 제공 안내</h2>
+          <p>
+            디지털 후원은 결제 완료 후 즉시 주문 내역으로 반영됩니다. 실물 선물은 판매자 확인 후 개별 배송되며, 배송비와 예상 배송일은
+            상품 상세 안내 또는 고객센터 안내에 따릅니다.
+          </p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
-  return <footer>SafeWish · Creator Safe Support Platform MVP</footer>;
+  return (
+    <footer className="site-footer">
+      <div className="footer-grid">
+        <div>
+          <b>{businessInfo.shopName}</b>
+          <p>{businessInfo.serviceName} · 크리에이터 후원 및 선물 중개 서비스</p>
+        </div>
+        <div>
+          <span>대표자: {businessInfo.representative}</span>
+          <span>사업자등록번호: {businessInfo.businessNumber}</span>
+          <span>통신판매업: {businessInfo.mailOrderNumber}</span>
+        </div>
+        <div>
+          <span>주소: {businessInfo.address}</span>
+          <span>고객센터: {businessInfo.customerCenter}</span>
+          <span>이메일: {businessInfo.email}</span>
+        </div>
+        <div className="footer-links">
+          <a href="#business">사업자정보</a>
+          <a href="#policies">이용약관</a>
+          <a href="#policies">개인정보처리방침</a>
+          <a href="#policies">취소/환불정책</a>
+        </div>
+      </div>
+    </footer>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
