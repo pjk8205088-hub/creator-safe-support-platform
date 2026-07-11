@@ -34,13 +34,14 @@ cp apps/api/.env.example apps/api/.env
 
 ## 배포
 
+- 공개 홈페이지: https://pjk8205088-hub.github.io/creator-safe-support-platform/
 - 소개/랜딩: GitHub Pages 또는 Vercel
 - API: Render, Railway, Fly.io, AWS ECS 등
 - DB: PostgreSQL
 
 ## 현재 상태
 
-MVP 개발이 가능한 실행형 골격입니다. 실제 PG/카카오 알림톡 API 키를 넣으면 결제 승인, 알림톡 발송, 정산 자동화 구현으로 확장할 수 있습니다.
+MVP 개발이 가능한 실행형 골격입니다. GitHub Pages는 `gh-pages` 브랜치의 정적 빌드를 배포하도록 설정되어 있습니다. 실제 PG/카카오 알림톡 API 키를 넣으면 결제 승인, 알림톡 발송, 정산 자동화 구현으로 확장할 수 있습니다.
 
 
 ## 토스페이먼츠 준비
@@ -51,3 +52,7 @@ MVP 개발이 가능한 실행형 골격입니다. 실제 PG/카카오 알림톡
 cp apps/web/.env.example apps/web/.env
 cp apps/api/.env.example apps/api/.env
 ```
+
+## NICEPAY 심사 준비
+
+웹앱에는 사업자정보, 이용약관, 개인정보처리방침, 취소/환불정책, 상품별 구매 안내가 표시됩니다. NICEPAY 심사 전 고객센터 연락처와 통신판매업 신고번호를 실제 정보로 교체하세요.
