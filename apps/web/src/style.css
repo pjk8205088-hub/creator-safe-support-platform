@@ -697,7 +697,8 @@ footer {
 
 .review-grid,
 .notice-grid,
-.policy-grid {
+.policy-grid,
+.spec-grid {
   display: grid;
   gap: 16px;
 }
@@ -707,6 +708,7 @@ footer {
 }
 
 .review-grid article,
+.spec-grid article,
 .commerce-notice,
 .business-card,
 .policy-grid article,
@@ -719,6 +721,25 @@ footer {
 
 .review-grid article {
   padding: 20px;
+}
+
+.spec-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.spec-grid article {
+  padding: 20px;
+}
+
+.spec-grid h3 {
+  margin: 0 0 10px;
+}
+
+.spec-grid ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #53605c;
+  line-height: 1.75;
 }
 
 .review-grid svg {

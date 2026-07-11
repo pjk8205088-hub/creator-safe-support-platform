@@ -5,7 +5,6 @@ import {
   Bell,
   Check,
   CreditCard,
-  Gift,
   Grid3X3,
   HeartHandshake,
   LayoutDashboard,
@@ -81,7 +80,7 @@ type SupportForm = {
   supporterName: string;
   message: string;
   amount: number;
-  paymentProvider: 'MOCK';
+  paymentProvider: 'NICEPAY';
 };
 
 const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ? 'http://localhost:4000' : '');
@@ -89,16 +88,16 @@ const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 
 const businessInfo = {
-  shopName: '행성몰',
-  serviceName: 'SafeWish',
-  representative: '예은',
+  shopName: '인플러언서 코리아',
+  serviceName: '인플러언서 코리아',
+  representative: '황성필',
   businessNumber: '168-06-03440',
   address: '전북특별자치도 부안군 줄포면 부안로 911-16',
   businessType: '도매 및 소매업',
   businessItem: '전자상거래 소매 중개업',
   openingDate: '2026.07.09',
-  customerCenter: 'PG 신청서 기재 연락처로 교체 필요',
-  email: 'support@safewish.kr',
+  customerCenter: '010-8959-3256',
+  email: 'hspjjang@naver.com',
   mailOrderNumber: '구매안전서비스 확인증 발급 후 통신판매업 신고번호 기재',
   hostingProvider: 'GitHub Pages',
   pgProvider: 'NICEPAY'
@@ -106,35 +105,35 @@ const businessInfo = {
 
 const demoCategories: Category[] = [
   {
-    id: 'streaming',
-    name: 'Streaming Gear',
-    description: '방송 장비, 조명, 마이크처럼 팬이 바로 응원하기 좋은 아이템',
+    id: 'creator-support',
+    name: '인플루언서 후원',
+    description: '팬이 금액과 메시지 카드를 선택해 인플루언서에게 바로 마음을 전합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=900',
     featured: true,
     creatorCount: 1,
-    wishlistCount: 2
+    wishlistCount: 3
   },
   {
-    id: 'lifestyle',
-    name: 'Lifestyle',
-    description: '카페, 건강, 데스크 셋업 등 크리에이터의 일상을 지켜주는 선물',
+    id: 'kakao-alert',
+    name: '카카오 알림톡',
+    description: '결제/입금/DM 알림을 쓰는 카카오톡 환경에서 즉시 확인합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=900',
     featured: true,
     creatorCount: 1,
     wishlistCount: 1
   },
   {
-    id: 'beauty',
-    name: 'Beauty',
-    description: '뷰티 촬영, 리뷰 콘텐츠, 셀프 케어에 맞춘 위시리스트',
+    id: 'dm',
+    name: 'DM 메시지',
+    description: '후원자와 인플루언서가 스팸 필터가 적용된 1:1 메시지를 주고받습니다.',
     imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900',
     creatorCount: 1,
     wishlistCount: 1
   },
   {
-    id: 'digital',
-    name: 'Digital',
-    description: '구독권, 소프트웨어, 디지털 작업 도구를 위한 후원',
+    id: 'settlement',
+    name: '정산/팬등급',
+    description: 'NICEPAY 결제 승인, 정산, 팬 등급과 활동 리포트를 운영자가 관리합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900',
     creatorCount: 1,
     wishlistCount: 1
@@ -145,82 +144,82 @@ const demoCreators: Creator[] = [
   {
     id: 'cr_1',
     slug: 'hana',
-    displayName: '하나 스튜디오',
-    handle: '@hana.studio',
-    bio: '일상, 뷰티, 데스크 셋업 콘텐츠를 만드는 크리에이터입니다.',
-    categoryId: 'lifestyle',
+    displayName: '하나 인플루언서',
+    handle: '@hana.official',
+    bio: '인스타그램과 유튜브에서 팬들과 소통하는 라이프스타일 인플루언서입니다.',
+    categoryId: 'creator-support',
     platform: 'YouTube',
     avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300',
     coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200',
-    addressMasked: '서울특별시 강남구 ****',
+    addressMasked: '센터 중계 주소로 실제 배송지 비공개',
     wishlist: [
       {
         id: 'wi_1',
-        title: '촬영용 무드 조명',
+        title: '응원 메시지 카드',
         price: 49000,
-        categoryId: 'streaming',
+        categoryId: 'creator-support',
         imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
-        note: '밤 촬영 때 화면 톤을 안정적으로 맞추고 싶어요.'
+        note: '결제 완료와 동시에 메시지 카드가 대시보드와 알림톡으로 전달됩니다.'
       },
       {
         id: 'wi_2',
-        title: '카페 작업 후원',
+        title: '콘텐츠 제작 후원',
         price: 15000,
-        categoryId: 'lifestyle',
+        categoryId: 'creator-support',
         imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-        note: '편집하는 날 커피 한 잔으로 힘을 보탤 수 있어요.'
+        note: '팬 등급과 활동 리포트에 반영되는 일반 후원입니다.'
       }
     ]
   },
   {
     id: 'cr_2',
     slug: 'min-games',
-    displayName: '민 게임즈',
+    displayName: '민 스트리머',
     handle: '@mingames',
-    bio: '게임 방송과 리뷰를 진행하며 안전한 선물 문화를 만들고 있습니다.',
-    categoryId: 'streaming',
+    bio: '게임 방송과 리뷰를 진행하며 팬 후원과 실시간 DM을 운영합니다.',
+    categoryId: 'dm',
     platform: 'Twitch',
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
     coverUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200',
-    addressMasked: '부산광역시 해운대구 ****',
+    addressMasked: '가상 주소/센터 중계 사용',
     wishlist: [
       {
         id: 'wi_3',
-        title: '방송 소품 후원',
+        title: '실시간 DM 후원',
         price: 30000,
-        categoryId: 'streaming',
+        categoryId: 'dm',
         imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-        note: '방송 배경을 더 깔끔하게 꾸미는 데 사용합니다.'
+        note: '후원자와 인플루언서가 1:1 메시지로 소통합니다.'
       },
       {
         id: 'wi_4',
-        title: '게임 리뷰 구독권',
+        title: '입금/결제 알림',
         price: 22000,
-        categoryId: 'digital',
+        categoryId: 'kakao-alert',
         imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-        note: '신작 리뷰 콘텐츠 제작에 도움이 됩니다.'
+        note: 'NICEPAY 결제/입금정보를 알림톡으로 즉시 확인합니다.'
       }
     ]
   },
   {
     id: 'cr_3',
     slug: 'yuri-beauty',
-    displayName: '유리 뷰티',
+    displayName: '유리 뷰티 인플루언서',
     handle: '@yuri.beauty',
-    bio: '스킨케어와 메이크업 루틴을 소개하는 뷰티 크리에이터입니다.',
-    categoryId: 'beauty',
+    bio: '팬 등급과 활동 리포트를 기반으로 커뮤니티를 운영하는 뷰티 인플루언서입니다.',
+    categoryId: 'settlement',
     platform: 'Instagram',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
     coverUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200',
-    addressMasked: '경기도 성남시 분당구 ****',
+    addressMasked: '주소 마스킹 대시보드 사용',
     wishlist: [
       {
         id: 'wi_5',
-        title: '뷰티 촬영 배경지',
+        title: 'VIP 팬 승급 후원',
         price: 18000,
-        categoryId: 'beauty',
+        categoryId: 'settlement',
         imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800',
-        note: '제품 컬러가 잘 보이는 촬영 배경을 준비하려고 해요.'
+        note: '관리자 또는 인플루언서가 후원 내역을 보고 팬 등급을 수동/자동 승급합니다.'
       }
     ]
   }
@@ -282,7 +281,7 @@ function App() {
     supporterName: '응원하는 팬',
     message: '늘 좋은 콘텐츠 고마워요!',
     amount: 15000,
-    paymentProvider: 'MOCK'
+    paymentProvider: 'NICEPAY'
   });
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -415,10 +414,10 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
     <nav className="nav">
       <a className="brand" href="#home">
         <ShieldCheck size={22} />
-        SafeWish
+        {businessInfo.serviceName}
       </a>
       <div className="nav-links">
-        <a href="#categories">카테고리</a>
+        <a href="#categories">서비스 기능</a>
         <a href="#dashboard">대시보드</a>
         <a href="#business">사업자정보</a>
         <a href="#policies">약관/환불</a>
@@ -468,14 +467,14 @@ function Home({
         <div className="hero-overlay">
           <span className="eyebrow">
             <Sparkles size={16} />
-            Privacy-first creator gifting
+            한국형 인플루언서 후원 플랫폼
           </span>
-          <h1>팬은 쉽게 선물하고, 크리에이터는 주소를 지킵니다.</h1>
-          <p>위시리스트, 카테고리 탐색, 안전 결제 흐름을 한 화면에서 시작하세요.</p>
+          <h1>내 주소는 숨기고, 내 마음은 카톡처럼 즉시 전달합니다.</h1>
+          <p>인플러언서 코리아는 NICEPAY 결제, 카카오 알림톡, 1:1 DM, 팬 등급 관리를 연결합니다.</p>
           <div className="hero-actions">
             <SearchBox value={query} onChange={setQuery} />
             <a className="solid-button large" href={session ? '#dashboard' : '#signup'}>
-              {session ? '내 대시보드' : '무료로 시작'}
+              {session ? '내 대시보드' : '간편 가입'}
               <ArrowRight size={18} />
             </a>
           </div>
@@ -484,11 +483,11 @@ function Home({
       <section className="content-band">
         <div className="section-head">
           <div>
-            <span className="kicker">Featured Categories</span>
-            <h2>인기 카테고리</h2>
+            <span className="kicker">Core Concept</span>
+            <h2>Throne의 한국형 재해석</h2>
           </div>
           <a className="text-link" href="#categories">
-            전체 보기 <ArrowRight size={16} />
+            기능 전체 보기 <ArrowRight size={16} />
           </a>
         </div>
         <CategoryGrid categories={categories.filter(category => category.featured).slice(0, 3)} />
@@ -496,20 +495,21 @@ function Home({
       <section className="content-band muted">
         <div className="section-head">
           <div>
-            <span className="kicker">Discover Creators</span>
-            <h2>크리에이터 위시리스트</h2>
+            <span className="kicker">Influencers</span>
+            <h2>인플루언서 후원 채널</h2>
           </div>
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
       <section className="content-band">
         <div className="steps">
-          <Step icon={<Grid3X3 />} title="위시리스트 구성" text="카테고리별 아이템을 모아 공개 페이지로 공유합니다." />
-          <Step icon={<CreditCard />} title="안전 결제" text="팬은 선택한 선물이나 금액을 카드 및 간편결제로 후원할 수 있습니다." />
-          <Step icon={<Bell />} title="도착 알림" text="후원 내역과 알림이 대시보드에 바로 쌓입니다." />
+          <Step icon={<Grid3X3 />} title="주소 비공개" text="가상 주소와 센터 중계로 인플루언서의 실제 배송지 노출을 막습니다." />
+          <Step icon={<CreditCard />} title="NICEPAY 결제" text="토스, 카카오페이 등 간편결제 확장을 고려한 결제/입금 확인 구조입니다." />
+          <Step icon={<Bell />} title="카카오 알림톡" text="결제와 DM 이벤트를 인플루언서가 쓰는 카카오톡 환경에서 즉시 확인합니다." />
         </div>
       </section>
       <ReviewReadySection />
+      <MvpSpecSection />
     </>
   );
 }
@@ -519,10 +519,10 @@ function ReviewReadySection() {
     <section className="content-band review-ready">
       <div className="section-head">
         <div>
-          <span className="kicker">NICEPAY REVIEW READY</span>
-          <h2>결제 심사 필수 운영 정보</h2>
+          <span className="kicker">MVP Priority</span>
+          <h2>필수 기능 구성</h2>
           <p>
-            사업자등록증 기준 정보, 고객 안내, 환불/취소 기준을 사이트 안에서 바로 확인할 수 있도록 정리했습니다.
+            팬, 인플루언서, 운영자가 바로 이해할 수 있도록 결제, 알림톡, DM, 정산 흐름을 전면에 배치했습니다.
           </p>
         </div>
         <a className="solid-button" href="#business">
@@ -533,24 +533,78 @@ function ReviewReadySection() {
       <div className="review-grid">
         <article>
           <ShieldCheck size={22} />
-          <h3>사업자 정보 공개</h3>
+          <h3>프라이버시</h3>
           <p>
-            상호, 대표자, 사업자등록번호, 주소, 업태/종목을 사업자등록증과 동일하게 표시합니다.
+            배송지 주소는 가상 주소와 센터 중계를 통해 마스킹하고, 대시보드에는 필요한 정보만 노출합니다.
           </p>
         </article>
         <article>
           <CreditCard size={22} />
-          <h3>결제/주문 안내</h3>
+          <h3>NICEPAY 결제</h3>
           <p>
-            상품 또는 후원 금액, 결제 수단, 결제 완료 후 제공 방식과 주문 확인 방법을 안내합니다.
+            PG사는 NICEPAY 기준으로 진행하고, 결제 승인과 정산 관리를 운영 대시보드에서 확인합니다.
           </p>
         </article>
         <article>
           <HeartHandshake size={22} />
-          <h3>환불/고객센터</h3>
+          <h3>카카오 알림톡과 DM</h3>
           <p>
-            취소 및 환불 기준, 문의 이메일, 고객센터 정보를 별도 정책 페이지와 푸터에 노출합니다.
+            결제/입금정보와 팬 메시지는 카카오 알림톡과 1:1 DM으로 즉각 전달됩니다.
           </p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function MvpSpecSection() {
+  return (
+    <section className="content-band muted">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Service Blueprint</span>
+          <h2>인플러언서 코리아 기능 명세</h2>
+          <p>
+            MVP는 팬 후원, 인플루언서 대시보드, 관리자 정산, DM 커뮤니티를 우선순위로 구성합니다.
+          </p>
+        </div>
+      </div>
+      <div className="spec-grid">
+        <article>
+          <h3>팬 기능</h3>
+          <ul>
+            <li>카카오/네이버 간편 회원가입</li>
+            <li>인플루언서 후원 채널 조회</li>
+            <li>NICEPAY 기반 간편결제</li>
+            <li>메시지 카드 작성 및 전송</li>
+          </ul>
+        </article>
+        <article>
+          <h3>인플루언서 기능</h3>
+          <ul>
+            <li>후원 금액 및 현금성 후원 등록</li>
+            <li>카카오 알림톡 실시간 수신</li>
+            <li>주소 마스킹 대시보드</li>
+            <li>인스타그램 등록 후 DM 흐름 연결</li>
+          </ul>
+        </article>
+        <article>
+          <h3>관리자 기능</h3>
+          <ul>
+            <li>NICEPAY 결제 승인 및 입금 관리</li>
+            <li>정산 상태와 PG 연동 관리</li>
+            <li>팬 등급 수동/자동 승급</li>
+            <li>스팸 방지 필터와 DM 모니터링</li>
+          </ul>
+        </article>
+        <article>
+          <h3>실시간 메시지</h3>
+          <ul>
+            <li>Socket.io 기반 1:1 메시지 구조</li>
+            <li>후원 내역 기반 팬덤 지표</li>
+            <li>활동 리포트와 팬 등급 반영</li>
+            <li>카카오 비즈메시지 알림 연계</li>
+          </ul>
         </article>
       </div>
     </section>
@@ -576,14 +630,14 @@ function Catalog({
       <div className="section-head">
         <div>
           <span className="kicker">Browse</span>
-          <h1>{active ? active.name : '카테고리 탐색'}</h1>
-          <p>{active ? active.description : '콘텐츠 유형에 맞는 크리에이터와 위시리스트를 찾아보세요.'}</p>
+          <h1>{active ? active.name : '서비스 기능 탐색'}</h1>
+          <p>{active ? active.description : '후원, 알림톡, DM, 팬등급, 정산 기능을 한눈에 확인하세요.'}</p>
         </div>
         <SearchBox value={query} onChange={setQuery} compact />
       </div>
       <CategoryGrid categories={categories} activeCategory={activeCategory} />
       <div className="section-head compact-head">
-        <h2>{active ? `${active.name} 크리에이터` : '전체 크리에이터'}</h2>
+        <h2>{active ? `${active.name} 인플루언서` : '전체 인플루언서'}</h2>
         {active && (
           <a className="text-link" href="#categories">
             필터 해제
@@ -610,7 +664,7 @@ function SearchBox({
       <input
         value={value}
         onChange={event => onChange(event.target.value)}
-        placeholder="크리에이터, 플랫폼, 키워드 검색"
+        placeholder="인플루언서, 플랫폼, 기능 검색"
       />
     </label>
   );
@@ -629,7 +683,7 @@ function CategoryGrid({ categories, activeCategory }: { categories: Category[]; 
           <span>{category.name}</span>
           <p>{category.description}</p>
           <small>
-            {category.creatorCount} creators · {category.wishlistCount} wishes
+            {category.creatorCount} influencers · {category.wishlistCount} flows
           </small>
         </a>
       ))}
@@ -639,7 +693,7 @@ function CategoryGrid({ categories, activeCategory }: { categories: Category[]; 
 
 function CreatorGrid({ creators }: { creators: Creator[] }) {
   if (!creators.length) {
-    return <div className="empty-state">검색 조건에 맞는 크리에이터가 아직 없습니다.</div>;
+    return <div className="empty-state">검색 조건에 맞는 인플루언서가 아직 없습니다.</div>;
   }
   return (
     <div className="creator-grid">
@@ -656,7 +710,7 @@ function CreatorGrid({ creators }: { creators: Creator[] }) {
           <p>{creator.bio}</p>
           <div className="pill-row">
             <span>{creator.platform}</span>
-            <span>{creator.wishlist.length} wishes</span>
+            <span>{creator.wishlist.length} support flows</span>
           </div>
         </a>
       ))}
@@ -694,7 +748,7 @@ function CreatorPage({
       <div className="creator-layout">
         <div>
           <div className="section-head compact-head">
-            <h2>위시리스트</h2>
+            <h2>후원 채널</h2>
             <span className="account-chip">{creator.platform}</span>
           </div>
           <div className="wish-grid">
@@ -707,10 +761,7 @@ function CreatorPage({
                 </div>
                 <div className="wish-footer">
                   <b>{item.price.toLocaleString()}원</b>
-                  <button className="solid-button" onClick={() => submitSupport(item.id)}>
-                    <Gift size={17} />
-                    선물
-                  </button>
+                  <span className="account-chip">후원 옵션</span>
                 </div>
               </article>
             ))}
@@ -756,19 +807,19 @@ function CreatorPage({
 function ProductNotice() {
   return (
     <section className="commerce-notice" aria-label="구매 및 환불 안내">
-      <h2>구매 및 환불 안내</h2>
+      <h2>후원 및 메시지 안내</h2>
       <div className="notice-grid">
         <div>
-          <b>상품/서비스 제공</b>
-          <p>후원 또는 선물 결제 완료 후 크리에이터 대시보드에 주문 내역이 즉시 생성됩니다.</p>
+          <b>후원 처리</b>
+          <p>후원 결제 완료 후 인플루언서 대시보드에 내역이 생성되고 카카오 알림톡 발송 대상으로 기록됩니다.</p>
         </div>
         <div>
-          <b>배송 안내</b>
-          <p>실물 선물은 판매자 확인 후 개별 배송되며, 배송이 필요한 상품은 상세 안내에 따라 처리됩니다.</p>
+          <b>DM 메시지</b>
+          <p>팬이 작성한 메시지 카드는 스팸 필터링 후 인플루언서에게 1:1 DM 형태로 전달됩니다.</p>
         </div>
         <div>
           <b>취소/환불</b>
-          <p>결제 당일 미처리 주문은 고객센터 접수 후 취소할 수 있습니다. 제공 또는 배송이 시작된 경우 전자상거래법과 개별 상품 고지 기준을 따릅니다.</p>
+          <p>결제 당일 미처리 후원은 고객센터 접수 후 취소할 수 있습니다. 이미 알림/메시지 처리가 완료된 경우 약관과 PG 기준을 따릅니다.</p>
         </div>
         <div>
           <b>문의</b>
@@ -824,14 +875,14 @@ function AuthPage({
       setError('이메일과 비밀번호를 확인해주세요.');
       return;
     }
-    setSession(createDemoSession(mode === 'login' ? '하나 스튜디오' : name || '새 크리에이터', email, role));
+    setSession(createDemoSession(mode === 'login' ? '하나 인플루언서' : name || '새 인플루언서', email, role));
     location.hash = 'dashboard';
   }
 
   async function socialDemo(provider: string) {
     setBusy(true);
     setError('');
-    const demoEmail = `${provider.toLowerCase()}@safewish.local`;
+    const demoEmail = `${provider.toLowerCase()}@influencer-korea.local`;
     if (API) {
       const response = await fetch(`${API}/api/auth/signup`, {
         method: 'POST',
@@ -873,7 +924,7 @@ function AuthPage({
         </span>
         <h1>{mode === 'login' ? '로그인' : '가입하기'}</h1>
         <div className="social-row">
-          {['Google', 'Apple', 'Twitch'].map(provider => (
+          {['Kakao', 'Naver', 'Instagram'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
               {provider}
             </button>
@@ -884,11 +935,11 @@ function AuthPage({
           <>
             <label>
               이름
-              <input value={name} onChange={event => setName(event.target.value)} placeholder="크리에이터 이름" required />
+              <input value={name} onChange={event => setName(event.target.value)} placeholder="인플루언서 이름" required />
             </label>
             <div className="segment">
               <button type="button" className={role === 'CREATOR' ? 'active' : ''} onClick={() => setRole('CREATOR')}>
-                크리에이터
+                인플루언서
               </button>
               <button type="button" className={role === 'FAN' ? 'active' : ''} onClick={() => setRole('FAN')}>
                 팬
@@ -931,8 +982,8 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
       <div className="section-head">
         <div>
           <span className="kicker">Dashboard</span>
-          <h1>{session ? `${session.user.name}님의 대시보드` : '크리에이터 대시보드'}</h1>
-          <p>후원, 결제, 알림 흐름을 한 번에 확인합니다.</p>
+          <h1>{session ? `${session.user.name}님의 대시보드` : '인플루언서 대시보드'}</h1>
+          <p>후원, NICEPAY 결제, 카카오 알림톡, DM 흐름을 한 번에 확인합니다.</p>
         </div>
         {!session && (
           <a className="solid-button" href="#login">
@@ -942,7 +993,7 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         )}
       </div>
       <div className="stats">
-        <Stat icon={<Gift />} label="총 후원" value={`${supports.length}건`} />
+        <Stat icon={<HeartHandshake />} label="총 후원" value={`${supports.length}건`} />
         <Stat icon={<CreditCard />} label="총액" value={`${revenue.toLocaleString()}원`} />
         <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
@@ -966,13 +1017,13 @@ function Admin({
         <div>
           <span className="kicker">Admin</span>
           <h1>운영 관리</h1>
-          <p>카테고리, 크리에이터, 후원 상태를 점검합니다.</p>
+          <p>NICEPAY 승인, 정산, 팬 등급, DM 상태를 점검합니다.</p>
         </div>
       </div>
       <div className="stats">
         <Stat icon={<Grid3X3 />} label="카테고리" value={`${categories.length}개`} />
-        <Stat icon={<HeartHandshake />} label="크리에이터" value={`${creators.length}명`} />
-        <Stat icon={<Gift />} label="주문" value={`${supports.length}건`} />
+        <Stat icon={<HeartHandshake />} label="인플루언서" value={`${creators.length}명`} />
+        <Stat icon={<CreditCard />} label="결제/후원" value={`${supports.length}건`} />
       </div>
       <SupportTable supports={supports} />
     </section>
@@ -1031,8 +1082,8 @@ function Success() {
   return (
     <section className="center">
       <Check size={42} />
-      <h1>후원이 완료되었습니다.</h1>
-      <p>크리에이터에게 알림이 생성되었고 대시보드에서 내역을 확인할 수 있습니다.</p>
+      <h1>후원이 접수되었습니다.</h1>
+      <p>인플루언서에게 카카오 알림톡과 DM 알림으로 전달될 내역이 생성되었습니다.</p>
       <a className="solid-button large" href="#dashboard">
         <LayoutDashboard size={18} />
         대시보드 확인
@@ -1110,8 +1161,8 @@ function BusinessPage() {
       <div className="callout warning-callout">
         <b>심사 전 확인 필요</b>
         <p>
-          고객센터 번호와 통신판매업 신고번호는 사업자등록증 이미지에서 확인되지 않았습니다. NICEPAY 신청서에 제출하는 실제 연락처와
-          신고번호로 교체해야 심사 반려 가능성을 줄일 수 있습니다.
+          고객센터와 대표자 연락처는 요청하신 정보로 반영했습니다. 통신판매업 신고번호는 구매안전서비스 확인증 발급 후 실제 신고번호로
+          교체해야 심사 반려 가능성을 줄일 수 있습니다.
         </p>
       </div>
     </section>
@@ -1132,8 +1183,8 @@ function PolicyPage() {
         <article>
           <h2>이용약관</h2>
           <p>
-            SafeWish는 크리에이터 후원 및 선물 주문을 중개하는 서비스입니다. 이용자는 표시된 금액과 상품 정보를 확인한 뒤 결제하며,
-            결제 완료 후 주문 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
+            인플러언서 코리아는 인플루언서 후원, 메시지 카드, 카카오 알림톡, 팬 등급 관리를 연결하는 서비스입니다. 이용자는 표시된
+            후원 금액과 메시지 내용을 확인한 뒤 결제하며, 결제 완료 후 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
           </p>
           <p>
             부정 사용, 타인의 권리 침해, 허위 주문, 결제수단 도용이 확인되는 경우 서비스 이용이 제한될 수 있습니다.
@@ -1142,7 +1193,7 @@ function PolicyPage() {
         <article>
           <h2>개인정보처리방침</h2>
           <p>
-            회원가입, 주문 처리, 결제 확인, 고객 상담을 위해 이름, 이메일, 주문/결제 정보, 문의 내용을 수집할 수 있습니다.
+            회원가입, 후원 처리, 결제 확인, DM 전달, 고객 상담을 위해 이름, 이메일, 후원/결제 정보, 문의 내용을 수집할 수 있습니다.
             수집한 정보는 서비스 제공과 법령상 보관 의무 이행 목적에 한해 사용합니다.
           </p>
           <p>
@@ -1152,16 +1203,16 @@ function PolicyPage() {
         <article>
           <h2>취소 및 환불 정책</h2>
           <p>
-            결제 당일 아직 처리되지 않은 주문은 고객센터 접수 후 취소할 수 있습니다. 이미 크리에이터에게 전달되었거나 실물 배송이 시작된
-            주문은 상품 성격, 제공 상태, 전자상거래 관련 법령에 따라 환불 가능 여부가 달라질 수 있습니다.
+            결제 당일 아직 처리되지 않은 후원은 고객센터 접수 후 취소할 수 있습니다. 이미 인플루언서에게 알림톡 또는 DM으로 전달된
+            내역은 제공 상태, 약관, 결제대행사 기준에 따라 환불 가능 여부가 달라질 수 있습니다.
           </p>
-          <p>환불 요청은 주문번호, 결제자명, 연락처, 요청 사유를 포함해 고객센터로 접수해 주세요.</p>
+          <p>환불 요청은 결제번호, 결제자명, 연락처, 요청 사유를 포함해 고객센터로 접수해 주세요.</p>
         </article>
         <article>
-          <h2>배송 및 제공 안내</h2>
+          <h2>주소 보호 및 제공 안내</h2>
           <p>
-            디지털 후원은 결제 완료 후 즉시 주문 내역으로 반영됩니다. 실물 선물은 판매자 확인 후 개별 배송되며, 배송비와 예상 배송일은
-            상품 상세 안내 또는 고객센터 안내에 따릅니다.
+            후원 내역은 결제 완료 후 즉시 대시보드에 반영됩니다. 배송이 필요한 제휴 상품을 향후 제공하는 경우 실제 주소는 가상 주소와
+            센터 중계 방식으로 보호하고, 배송비와 예상 배송일은 별도 안내합니다.
           </p>
         </article>
       </div>
@@ -1175,7 +1226,7 @@ function Footer() {
       <div className="footer-grid">
         <div>
           <b>{businessInfo.shopName}</b>
-          <p>{businessInfo.serviceName} · 크리에이터 후원 및 선물 중개 서비스</p>
+          <p>{businessInfo.serviceName} · 인플루언서 후원, 알림톡, DM 커뮤니티 서비스</p>
         </div>
         <div>
           <span>대표자: {businessInfo.representative}</span>
