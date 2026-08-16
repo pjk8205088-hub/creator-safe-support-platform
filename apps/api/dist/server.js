@@ -33,7 +33,7 @@ const categories = [
     {
         id: 'digital',
         name: 'Digital',
-        description: '구독권, 소프트웨어, 디지털 작업 도구를 위한 후원',
+        description: '구독권, 소프트웨어, 디지털 작업 도구를 위한 포인트 이용',
         imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900'
     }
 ];
@@ -60,7 +60,7 @@ const creators = [
             },
             {
                 id: 'wi_2',
-                title: '카페 작업 후원',
+                title: '카페 작업 포인트 이용',
                 price: 15000,
                 categoryId: 'lifestyle',
                 imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
@@ -82,7 +82,7 @@ const creators = [
         wishlist: [
             {
                 id: 'wi_3',
-                title: '방송 소품 후원',
+                title: '방송 소품 포인트 이용',
                 price: 30000,
                 categoryId: 'streaming',
                 imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
@@ -257,8 +257,8 @@ app.post('/api/supports', (req, res) => {
         id: `nt_${nanoid(8)}`,
         creatorId: creator.id,
         channel: 'KAKAO_ALIMTALK',
-        title: '새 후원이 도착했습니다',
-        body: `${input.supporterName}님이 ${input.amount.toLocaleString()}원을 후원했습니다.`,
+        title: '새 포인트 이용이 도착했습니다',
+        body: `${input.supporterName}님이 ${input.amount.toLocaleString()}원을 포인트 이용했습니다.`,
         createdAt: new Date().toISOString()
     });
     res.status(201).json(support);

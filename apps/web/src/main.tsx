@@ -79,13 +79,21 @@ type Session = {
 type SupportForm = {
   supporterName: string;
   message: string;
-  amount: number;
   paymentProvider: 'NICEPAY';
+};
+
+type PointPackage = {
+  id: string;
+  name: string;
+  points: number;
+  price: number;
+  description: string;
 };
 
 const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ? 'http://localhost:4000' : '');
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
+const walletKey = 'cssp-demo-point-wallet';
 
 const businessInfo = {
   shopName: '인플러언서 코리아',
@@ -98,16 +106,16 @@ const businessInfo = {
   openingDate: '2026.07.09',
   customerCenter: '010-8959-3256',
   email: 'hspjjang@naver.com',
-  mailOrderNumber: '구매안전서비스 확인증 발급 후 통신판매업 신고번호 기재',
+  mailOrderNumber: '2026-4791022-30-2-00060',
   hostingProvider: 'GitHub Pages',
   pgProvider: 'NICEPAY'
 };
 
 const demoCategories: Category[] = [
   {
-    id: 'creator-support',
-    name: '인플루언서 후원',
-    description: '팬이 금액과 메시지 카드를 선택해 인플루언서에게 바로 마음을 전합니다.',
+    id: 'digital-content',
+    name: '디지털 콘텐츠',
+    description: '포인트로 크리에이터별 사진, 영상, 비하인드 콘텐츠 패스를 구매합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=900',
     featured: true,
     creatorCount: 1,
@@ -116,7 +124,7 @@ const demoCategories: Category[] = [
   {
     id: 'kakao-alert',
     name: '카카오 알림톡',
-    description: '결제/입금/DM 알림을 쓰는 카카오톡 환경에서 즉시 확인합니다.',
+    description: '포인트 충전, 디지털 상품 제공, DM 이용권 상태를 알림으로 확인합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=900',
     featured: true,
     creatorCount: 1,
@@ -125,19 +133,25 @@ const demoCategories: Category[] = [
   {
     id: 'dm',
     name: 'DM 메시지',
-    description: '후원자와 인플루언서가 스팸 필터가 적용된 1:1 메시지를 주고받습니다.',
+    description: '구매한 이용권 범위에서 스팸 필터가 적용된 1:1 메시지를 주고받습니다.',
     imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900',
     creatorCount: 1,
     wishlistCount: 1
   },
   {
-    id: 'settlement',
-    name: '정산/팬등급',
-    description: 'NICEPAY 결제 승인, 정산, 팬 등급과 활동 리포트를 운영자가 관리합니다.',
+    id: 'membership',
+    name: '멤버십 패스',
+    description: '기간형 멤버십과 활동 등급, 디지털 콘텐츠 이용 현황을 운영자가 관리합니다.',
     imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900',
     creatorCount: 1,
     wishlistCount: 1
   }
+];
+
+const pointPackages: PointPackage[] = [
+  { id: 'point-5000', name: 'STARTER', points: 5000, price: 5000, description: '디지털 콘텐츠 이용 시작' },
+  { id: 'point-12000', name: 'PLUS', points: 12000, price: 12000, description: 'DM 이용권과 콘텐츠 패스' },
+  { id: 'point-30000', name: 'CLUB', points: 30000, price: 30000, description: '기간형 멤버십과 프리미엄 에디션' }
 ];
 
 const demoCreators: Creator[] = [
@@ -147,7 +161,7 @@ const demoCreators: Creator[] = [
     displayName: '하나 인플루언서',
     handle: '@hana.official',
     bio: '인스타그램과 유튜브에서 팬들과 소통하는 라이프스타일 인플루언서입니다.',
-    categoryId: 'creator-support',
+    categoryId: 'digital-content',
     platform: 'YouTube',
     avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300',
     coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200',
@@ -155,19 +169,19 @@ const demoCreators: Creator[] = [
     wishlist: [
       {
         id: 'wi_1',
-        title: '응원 메시지 카드',
+        title: '뷰티 비하인드 콘텐츠 패스',
         price: 49000,
-        categoryId: 'creator-support',
+        categoryId: 'digital-content',
         imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
-        note: '결제 완료와 동시에 메시지 카드가 대시보드와 알림톡으로 전달됩니다.'
+        note: '구매 후 비하인드 사진과 영상 콘텐츠를 열람할 수 있습니다.'
       },
       {
         id: 'wi_2',
-        title: '콘텐츠 제작 후원',
+        title: '프리미엄 DM 이용권',
         price: 15000,
-        categoryId: 'creator-support',
+        categoryId: 'dm',
         imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-        note: '팬 등급과 활동 리포트에 반영되는 일반 후원입니다.'
+        note: '구매 후 크리에이터에게 메시지를 보낼 수 있는 이용권입니다.'
       }
     ]
   },
@@ -176,7 +190,7 @@ const demoCreators: Creator[] = [
     slug: 'min-games',
     displayName: '민 스트리머',
     handle: '@mingames',
-    bio: '게임 방송과 리뷰를 진행하며 팬 후원과 실시간 DM을 운영합니다.',
+    bio: '게임 방송과 리뷰를 진행하며 디지털 콘텐츠와 실시간 DM 이용권을 운영합니다.',
     categoryId: 'dm',
     platform: 'Twitch',
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
@@ -185,11 +199,11 @@ const demoCreators: Creator[] = [
     wishlist: [
       {
         id: 'wi_3',
-        title: '실시간 DM 후원',
+        title: '실시간 DM 패스',
         price: 30000,
         categoryId: 'dm',
         imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-        note: '후원자와 인플루언서가 1:1 메시지로 소통합니다.'
+        note: '구매자와 인플루언서가 1:1 메시지로 소통합니다.'
       },
       {
         id: 'wi_4',
@@ -207,7 +221,7 @@ const demoCreators: Creator[] = [
     displayName: '유리 뷰티 인플루언서',
     handle: '@yuri.beauty',
     bio: '팬 등급과 활동 리포트를 기반으로 커뮤니티를 운영하는 뷰티 인플루언서입니다.',
-    categoryId: 'settlement',
+    categoryId: 'membership',
     platform: 'Instagram',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
     coverUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200',
@@ -215,11 +229,11 @@ const demoCreators: Creator[] = [
     wishlist: [
       {
         id: 'wi_5',
-        title: 'VIP 팬 승급 후원',
+        title: 'VIP 멤버십 패스',
         price: 18000,
-        categoryId: 'settlement',
+        categoryId: 'membership',
         imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800',
-        note: '관리자 또는 인플루언서가 후원 내역을 보고 팬 등급을 수동/자동 승급합니다.'
+        note: '기간형 멤버십과 전용 콘텐츠, 활동 등급 혜택을 제공합니다.'
       }
     ]
   }
@@ -235,6 +249,14 @@ function readStoredSupports() {
 
 function saveStoredSupports(supports: Support[]) {
   localStorage.setItem(supportKey, JSON.stringify(supports));
+}
+
+function readWalletPoints() {
+  return Math.max(0, Number(localStorage.getItem(walletKey)) || 0);
+}
+
+function saveWalletPoints(points: number) {
+  localStorage.setItem(walletKey, String(Math.max(0, points)));
 }
 
 async function getJson<T>(path: string, fallback: T): Promise<T> {
@@ -280,9 +302,9 @@ function App() {
   const [supportForm, setSupportForm] = useState<SupportForm>({
     supporterName: '응원하는 팬',
     message: '늘 좋은 콘텐츠 고마워요!',
-    amount: 15000,
     paymentProvider: 'NICEPAY'
   });
+  const [walletPoints, setWalletPoints] = useState(readWalletPoints);
   const [searchQuery, setSearchQuery] = useState('');
 
   const load = async () => {
@@ -334,13 +356,24 @@ function App() {
   }, [activeCategory, creators, searchQuery]);
   const revenue = useMemo(() => supports.reduce((sum, item) => sum + item.amount, 0), [supports]);
 
-  async function submitSupport(itemId?: string) {
+  function chargePoints(pointPackage: PointPackage) {
+    const nextPoints = walletPoints + pointPackage.points;
+    saveWalletPoints(nextPoints);
+    setWalletPoints(nextPoints);
+    location.hash = 'wallet';
+  }
+
+  async function submitSupport(item: WishlistItem) {
     if (!selected) return;
+    if (walletPoints < item.price) {
+      location.hash = 'wallet';
+      return;
+    }
     const body = {
       ...supportForm,
       creatorId: selected.id,
-      wishlistItemId: itemId,
-      amount: Number(supportForm.amount)
+      wishlistItemId: item.id,
+      amount: item.price
     };
     if (API) {
       const response = await fetch(`${API}/api/supports`, {
@@ -349,6 +382,9 @@ function App() {
         body: JSON.stringify(body)
       }).catch(() => null);
       if (response?.ok) {
+        const nextPoints = walletPoints - item.price;
+        saveWalletPoints(nextPoints);
+        setWalletPoints(nextPoints);
         await load();
         location.hash = 'success';
         return;
@@ -366,6 +402,9 @@ function App() {
     const nextSupports = [support, ...supports];
     saveStoredSupports(nextSupports);
     setSupports(nextSupports);
+    const nextPoints = walletPoints - item.price;
+    saveWalletPoints(nextPoints);
+    setWalletPoints(nextPoints);
     location.hash = 'success';
   }
 
@@ -383,7 +422,15 @@ function App() {
     <main>
       <Nav session={session} onLogout={logout} />
       {page === 'home' && (
-        <Home categories={categories} creators={visibleCreators} query={searchQuery} setQuery={setSearchQuery} session={session} />
+        <Home
+          categories={categories}
+          creators={visibleCreators}
+          query={searchQuery}
+          setQuery={setSearchQuery}
+          session={session}
+          walletPoints={walletPoints}
+          chargePoints={chargePoints}
+        />
       )}
       {(page === 'categories' || page.startsWith('category/')) && (
         <Catalog
@@ -395,11 +442,12 @@ function App() {
         />
       )}
       {page.startsWith('creator/') && selected && (
-        <CreatorPage creator={selected} form={supportForm} setForm={setSupportForm} submitSupport={submitSupport} />
+        <CreatorPage creator={selected} form={supportForm} setForm={setSupportForm} submitSupport={submitSupport} walletPoints={walletPoints} />
       )}
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
       {page === 'success' && <Success />}
+      {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
       {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} />}
       {page === 'business' && <BusinessPage />}
@@ -418,6 +466,7 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
       </a>
       <div className="nav-links">
         <a href="#categories">서비스 기능</a>
+        <a href="#wallet">포인트 충전</a>
         <a href="#dashboard">대시보드</a>
         <a href="#business">사업자정보</a>
         <a href="#policies">약관/환불</a>
@@ -453,13 +502,17 @@ function Home({
   creators,
   query,
   setQuery,
-  session
+  session,
+  walletPoints,
+  chargePoints
 }: {
   categories: Category[];
   creators: Creator[];
   query: string;
   setQuery: (value: string) => void;
   session: Session | null;
+  walletPoints: number;
+  chargePoints: (pointPackage: PointPackage) => void;
 }) {
   return (
     <>
@@ -467,10 +520,10 @@ function Home({
         <div className="hero-overlay">
           <span className="eyebrow">
             <Sparkles size={16} />
-            한국형 인플루언서 후원 플랫폼
+            포인트 기반 디지털 콘텐츠 플랫폼
           </span>
-          <h1>내 주소는 숨기고, 내 마음은 카톡처럼 즉시 전달합니다.</h1>
-          <p>인플러언서 코리아는 NICEPAY 결제, 카카오 알림톡, 1:1 DM, 팬 등급 관리를 연결합니다.</p>
+          <h1>포인트를 충전하고 크리에이터의 디지털 콘텐츠를 이용하세요.</h1>
+          <p>인플러언서 코리아는 포인트 충전, 디지털 콘텐츠, DM 이용권, 기간형 멤버십을 연결합니다.</p>
           <div className="hero-actions">
             <SearchBox value={query} onChange={setQuery} />
             <a className="solid-button large" href={session ? '#dashboard' : '#signup'}>
@@ -478,6 +531,31 @@ function Home({
               <ArrowRight size={18} />
             </a>
           </div>
+        </div>
+      </section>
+      <section className="content-band point-wallet-band">
+        <div className="section-head">
+          <div>
+            <span className="kicker">Point Wallet</span>
+            <h2>포인트 충전</h2>
+            <p>충전 포인트는 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다. 현금 환전과 계정 간 이전은 지원하지 않습니다.</p>
+          </div>
+          <a className="solid-button" href="#wallet">
+            보유 포인트 {walletPoints.toLocaleString()}P
+            <ArrowRight size={16} />
+          </a>
+        </div>
+        <div className="review-grid">
+          {pointPackages.map(pointPackage => (
+            <article key={pointPackage.id}>
+              <CreditCard size={22} />
+              <h3>{pointPackage.name} · {pointPackage.points.toLocaleString()}P</h3>
+              <p>{pointPackage.description}</p>
+              <button className="solid-button" type="button" onClick={() => chargePoints(pointPackage)}>
+                {pointPackage.price.toLocaleString()}원 충전
+              </button>
+            </article>
+          ))}
         </div>
       </section>
       <section className="content-band">
@@ -496,16 +574,16 @@ function Home({
         <div className="section-head">
           <div>
             <span className="kicker">Influencers</span>
-            <h2>인플루언서 후원 채널</h2>
+            <h2>인플루언서 디지털 콘텐츠</h2>
           </div>
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
       <section className="content-band">
         <div className="steps">
-          <Step icon={<Grid3X3 />} title="주소 비공개" text="가상 주소와 센터 중계로 인플루언서의 실제 배송지 노출을 막습니다." />
-          <Step icon={<CreditCard />} title="NICEPAY 결제" text="토스, 카카오페이 등 간편결제 확장을 고려한 결제/입금 확인 구조입니다." />
-          <Step icon={<Bell />} title="카카오 알림톡" text="결제와 DM 이벤트를 인플루언서가 쓰는 카카오톡 환경에서 즉시 확인합니다." />
+          <Step icon={<WalletCards />} title="포인트 충전" text="NICEPAY 등 계약된 결제수단으로 포인트를 충전합니다." />
+          <Step icon={<CreditCard />} title="디지털 상품 구매" text="콘텐츠 패스, DM 이용권, 기간형 멤버십을 포인트로 구매합니다." />
+          <Step icon={<Bell />} title="이용 알림" text="결제와 디지털 상품 제공 상태를 카카오 알림톡으로 안내합니다." />
         </div>
       </section>
       <ReviewReadySection />
@@ -522,7 +600,7 @@ function ReviewReadySection() {
           <span className="kicker">MVP Priority</span>
           <h2>필수 기능 구성</h2>
           <p>
-            팬, 인플루언서, 운영자가 바로 이해할 수 있도록 결제, 알림톡, DM, 정산 흐름을 전면에 배치했습니다.
+            팬, 인플루언서, 운영자가 바로 이해할 수 있도록 결제, 알림톡, DM, 상품 제공 흐름을 전면에 배치했습니다.
           </p>
         </div>
         <a className="solid-button" href="#business">
@@ -542,7 +620,7 @@ function ReviewReadySection() {
           <CreditCard size={22} />
           <h3>NICEPAY 결제</h3>
           <p>
-            PG사는 NICEPAY 기준으로 진행하고, 결제 승인과 정산 관리를 운영 대시보드에서 확인합니다.
+            PG사는 NICEPAY 기준으로 진행하고, 결제 승인과 상품 제공 관리를 운영 대시보드에서 확인합니다.
           </p>
         </article>
         <article>
@@ -565,7 +643,7 @@ function MvpSpecSection() {
           <span className="kicker">Service Blueprint</span>
           <h2>인플러언서 코리아 기능 명세</h2>
           <p>
-            MVP는 팬 후원, 인플루언서 대시보드, 관리자 정산, DM 커뮤니티를 우선순위로 구성합니다.
+            MVP는 포인트 충전, 디지털 상품 제공, 크리에이터 대시보드, DM 커뮤니티를 우선순위로 구성합니다.
           </p>
         </div>
       </div>
@@ -574,7 +652,7 @@ function MvpSpecSection() {
           <h3>팬 기능</h3>
           <ul>
             <li>카카오/네이버 간편 회원가입</li>
-            <li>인플루언서 후원 채널 조회</li>
+            <li>인플루언서 디지털 콘텐츠 조회</li>
             <li>NICEPAY 기반 간편결제</li>
             <li>메시지 카드 작성 및 전송</li>
           </ul>
@@ -582,7 +660,7 @@ function MvpSpecSection() {
         <article>
           <h3>인플루언서 기능</h3>
           <ul>
-            <li>후원 금액 및 현금성 후원 등록</li>
+            <li>디지털 콘텐츠와 멤버십 패스 등록</li>
             <li>카카오 알림톡 실시간 수신</li>
             <li>주소 마스킹 대시보드</li>
             <li>인스타그램 등록 후 DM 흐름 연결</li>
@@ -592,7 +670,7 @@ function MvpSpecSection() {
           <h3>관리자 기능</h3>
           <ul>
             <li>NICEPAY 결제 승인 및 입금 관리</li>
-            <li>정산 상태와 PG 연동 관리</li>
+            <li>상품 제공 상태와 PG 연동 관리</li>
             <li>팬 등급 수동/자동 승급</li>
             <li>스팸 방지 필터와 DM 모니터링</li>
           </ul>
@@ -601,7 +679,7 @@ function MvpSpecSection() {
           <h3>실시간 메시지</h3>
           <ul>
             <li>Socket.io 기반 1:1 메시지 구조</li>
-            <li>후원 내역 기반 팬덤 지표</li>
+            <li>디지털 상품 이용 내역 기반 활동 지표</li>
             <li>활동 리포트와 팬 등급 반영</li>
             <li>카카오 비즈메시지 알림 연계</li>
           </ul>
@@ -631,7 +709,7 @@ function Catalog({
         <div>
           <span className="kicker">Browse</span>
           <h1>{active ? active.name : '서비스 기능 탐색'}</h1>
-          <p>{active ? active.description : '후원, 알림톡, DM, 팬등급, 정산 기능을 한눈에 확인하세요.'}</p>
+          <p>{active ? active.description : '포인트 충전, 디지털 콘텐츠, DM 이용권, 멤버십 기능을 한눈에 확인하세요.'}</p>
         </div>
         <SearchBox value={query} onChange={setQuery} compact />
       </div>
@@ -710,7 +788,7 @@ function CreatorGrid({ creators }: { creators: Creator[] }) {
           <p>{creator.bio}</p>
           <div className="pill-row">
             <span>{creator.platform}</span>
-            <span>{creator.wishlist.length} support flows</span>
+            <span>{creator.wishlist.length} digital products</span>
           </div>
         </a>
       ))}
@@ -722,12 +800,14 @@ function CreatorPage({
   creator,
   form,
   setForm,
-  submitSupport
+  submitSupport,
+  walletPoints
 }: {
   creator: Creator;
   form: SupportForm;
   setForm: (value: SupportForm) => void;
-  submitSupport: (itemId?: string) => void;
+  submitSupport: (item: WishlistItem) => void;
+  walletPoints: number;
 }) {
   return (
     <section className="page-shell">
@@ -748,7 +828,7 @@ function CreatorPage({
       <div className="creator-layout">
         <div>
           <div className="section-head compact-head">
-            <h2>후원 채널</h2>
+            <h2>디지털 콘텐츠</h2>
             <span className="account-chip">{creator.platform}</span>
           </div>
           <div className="wish-grid">
@@ -760,22 +840,19 @@ function CreatorPage({
                   <p>{item.note}</p>
                 </div>
                 <div className="wish-footer">
-                  <b>{item.price.toLocaleString()}원</b>
-                  <span className="account-chip">후원 옵션</span>
+                  <b>{item.price.toLocaleString()}P</b>
+                  <button className="ghost-button" type="button" onClick={() => submitSupport(item)}>
+                    구매
+                  </button>
                 </div>
               </article>
             ))}
           </div>
           <ProductNotice />
         </div>
-        <form
-          className="support-panel"
-          onSubmit={event => {
-            event.preventDefault();
-            submitSupport();
-          }}
-        >
-          <h2>직접 후원</h2>
+        <aside className="support-panel">
+          <h2>내 포인트 지갑</h2>
+          <p>보유 포인트 <b>{walletPoints.toLocaleString()}P</b></p>
           <label>
             이름
             <input value={form.supporterName} onChange={event => setForm({ ...form, supporterName: event.target.value })} />
@@ -784,21 +861,44 @@ function CreatorPage({
             메시지
             <textarea value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} />
           </label>
-          <label>
-            금액
-            <input
-              type="number"
-              min={1000}
-              step={1000}
-              value={form.amount}
-              onChange={event => setForm({ ...form, amount: Number(event.target.value) })}
-            />
-          </label>
-          <button className="solid-button large" type="submit">
+          <p>상품별 포인트가 차감됩니다. 포인트가 부족한 경우 충전 페이지에서 패키지를 선택해 주세요.</p>
+          <a className="solid-button large" href="#wallet">
             <WalletCards size={18} />
-            결제하기
-          </button>
-        </form>
+            포인트 충전하기
+          </a>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function WalletPage({ walletPoints, chargePoints }: { walletPoints: number; chargePoints: (pointPackage: PointPackage) => void }) {
+  return (
+    <section className="page-shell legal-page">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Point Wallet</span>
+          <h1>포인트 충전</h1>
+          <p>포인트는 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다.</p>
+        </div>
+        <span className="account-chip">보유 {walletPoints.toLocaleString()}P</span>
+      </div>
+      <div className="review-grid">
+        {pointPackages.map(pointPackage => (
+          <article key={pointPackage.id}>
+            <WalletCards size={22} />
+            <h2>{pointPackage.name}</h2>
+            <p>{pointPackage.description}</p>
+            <b>{pointPackage.points.toLocaleString()}P · {pointPackage.price.toLocaleString()}원</b>
+            <button className="solid-button" type="button" onClick={() => chargePoints(pointPackage)}>
+              충전 주문 미리보기
+            </button>
+          </article>
+        ))}
+      </div>
+      <div className="callout warning-callout">
+        <b>NICEPAY 연동 준비</b>
+        <p>현재 버튼은 화면 검토용 미리보기입니다. 운영에서는 NICEPAY 결제 승인 콜백을 서버에서 검증한 뒤에만 포인트를 충전하고, 포인트는 현금 환전·양도·개인 간 전달 없이 사이트 내 디지털 상품 구매에만 사용해야 합니다.</p>
       </div>
     </section>
   );
@@ -807,19 +907,19 @@ function CreatorPage({
 function ProductNotice() {
   return (
     <section className="commerce-notice" aria-label="구매 및 환불 안내">
-      <h2>후원 및 메시지 안내</h2>
+      <h2>포인트 및 디지털 상품 안내</h2>
       <div className="notice-grid">
         <div>
-          <b>후원 처리</b>
-          <p>후원 결제 완료 후 인플루언서 대시보드에 내역이 생성되고 카카오 알림톡 발송 대상으로 기록됩니다.</p>
+          <b>디지털 상품 제공</b>
+          <p>포인트 충전 결제 완료 후 보유 포인트가 반영되며, 선택한 콘텐츠 패스나 이용권을 구매할 수 있습니다.</p>
         </div>
         <div>
           <b>DM 메시지</b>
-          <p>팬이 작성한 메시지 카드는 스팸 필터링 후 인플루언서에게 1:1 DM 형태로 전달됩니다.</p>
+          <p>DM 이용권을 구매한 회원은 스팸 필터링이 적용된 1:1 메시지 기능을 이용할 수 있습니다.</p>
         </div>
         <div>
           <b>취소/환불</b>
-          <p>결제 당일 미처리 후원은 고객센터 접수 후 취소할 수 있습니다. 이미 알림/메시지 처리가 완료된 경우 약관과 PG 기준을 따릅니다.</p>
+          <p>충전 오류 또는 미사용 포인트의 취소·환불은 고객센터로 접수할 수 있습니다. 이미 이용이 시작된 디지털 상품은 약관과 PG 기준을 따릅니다.</p>
         </div>
         <div>
           <b>문의</b>
@@ -983,7 +1083,7 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         <div>
           <span className="kicker">Dashboard</span>
           <h1>{session ? `${session.user.name}님의 대시보드` : '인플루언서 대시보드'}</h1>
-          <p>후원, NICEPAY 결제, 카카오 알림톡, DM 흐름을 한 번에 확인합니다.</p>
+          <p>포인트 충전, 디지털 상품 제공, 카카오 알림톡, DM 흐름을 한 번에 확인합니다.</p>
         </div>
         {!session && (
           <a className="solid-button" href="#login">
@@ -993,9 +1093,9 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         )}
       </div>
       <div className="stats">
-        <Stat icon={<HeartHandshake />} label="총 후원" value={`${supports.length}건`} />
+        <Stat icon={<HeartHandshake />} label="디지털 상품 주문" value={`${supports.length}건`} />
         <Stat icon={<CreditCard />} label="총액" value={`${revenue.toLocaleString()}원`} />
-        <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
+        <Stat icon={<Bell />} label="상품 제공 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
       <SupportTable supports={supports} />
     </section>
@@ -1017,13 +1117,13 @@ function Admin({
         <div>
           <span className="kicker">Admin</span>
           <h1>운영 관리</h1>
-          <p>NICEPAY 승인, 정산, 팬 등급, DM 상태를 점검합니다.</p>
+          <p>NICEPAY 승인, 상품 제공, 팬 등급, DM 상태를 점검합니다.</p>
         </div>
       </div>
       <div className="stats">
         <Stat icon={<Grid3X3 />} label="카테고리" value={`${categories.length}개`} />
         <Stat icon={<HeartHandshake />} label="인플루언서" value={`${creators.length}명`} />
-        <Stat icon={<CreditCard />} label="결제/후원" value={`${supports.length}건`} />
+        <Stat icon={<CreditCard />} label="포인트 충전/상품 주문" value={`${supports.length}건`} />
       </div>
       <SupportTable supports={supports} />
     </section>
@@ -1032,13 +1132,13 @@ function Admin({
 
 function SupportTable({ supports }: { supports: Support[] }) {
   if (!supports.length) {
-    return <div className="empty-state">아직 후원 내역이 없습니다.</div>;
+    return <div className="empty-state">아직 구매 내역이 없습니다.</div>;
   }
   return (
     <table>
       <thead>
         <tr>
-          <th>후원자</th>
+          <th>구매자</th>
           <th>금액</th>
           <th>상태</th>
           <th>메시지</th>
@@ -1082,8 +1182,8 @@ function Success() {
   return (
     <section className="center">
       <Check size={42} />
-      <h1>후원이 접수되었습니다.</h1>
-      <p>인플루언서에게 카카오 알림톡과 DM 알림으로 전달될 내역이 생성되었습니다.</p>
+      <h1>디지털 상품 주문이 접수되었습니다.</h1>
+      <p>결제 승인과 포인트 차감이 확인되면 구매한 디지털 상품의 이용 권한이 활성화됩니다.</p>
       <a className="solid-button large" href="#dashboard">
         <LayoutDashboard size={18} />
         대시보드 확인
@@ -1183,8 +1283,8 @@ function PolicyPage() {
         <article>
           <h2>이용약관</h2>
           <p>
-            인플러언서 코리아는 인플루언서 후원, 메시지 카드, 카카오 알림톡, 팬 등급 관리를 연결하는 서비스입니다. 이용자는 표시된
-            후원 금액과 메시지 내용을 확인한 뒤 결제하며, 결제 완료 후 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
+            인플러언서 코리아는 포인트 충전으로 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스를 구매하는 서비스입니다. 이용자는 표시된
+            충전 패키지와 디지털 상품의 가격, 제공 내용, 이용 기간을 확인한 뒤 결제하며, 결제 완료 후 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
           </p>
           <p>
             부정 사용, 타인의 권리 침해, 허위 주문, 결제수단 도용이 확인되는 경우 서비스 이용이 제한될 수 있습니다.
@@ -1193,7 +1293,7 @@ function PolicyPage() {
         <article>
           <h2>개인정보처리방침</h2>
           <p>
-            회원가입, 후원 처리, 결제 확인, DM 전달, 고객 상담을 위해 이름, 이메일, 후원/결제 정보, 문의 내용을 수집할 수 있습니다.
+            회원가입, 포인트 충전, 디지털 상품 제공, 결제 확인, DM 전달, 고객 상담을 위해 이름, 이메일, 주문·결제 정보, 문의 내용을 수집할 수 있습니다.
             수집한 정보는 서비스 제공과 법령상 보관 의무 이행 목적에 한해 사용합니다.
           </p>
           <p>
@@ -1203,15 +1303,15 @@ function PolicyPage() {
         <article>
           <h2>취소 및 환불 정책</h2>
           <p>
-            결제 당일 아직 처리되지 않은 후원은 고객센터 접수 후 취소할 수 있습니다. 이미 인플루언서에게 알림톡 또는 DM으로 전달된
-            내역은 제공 상태, 약관, 결제대행사 기준에 따라 환불 가능 여부가 달라질 수 있습니다.
+            충전 오류 또는 아직 사용하지 않은 포인트는 고객센터 접수 후 취소·환불을 요청할 수 있습니다. 이미 이용이 시작된 디지털 상품은
+            제공 상태, 약관, 결제대행사 기준에 따라 환불 가능 여부가 달라질 수 있습니다.
           </p>
           <p>환불 요청은 결제번호, 결제자명, 연락처, 요청 사유를 포함해 고객센터로 접수해 주세요.</p>
         </article>
         <article>
           <h2>주소 보호 및 제공 안내</h2>
           <p>
-            후원 내역은 결제 완료 후 즉시 대시보드에 반영됩니다. 배송이 필요한 제휴 상품을 향후 제공하는 경우 실제 주소는 가상 주소와
+            구매 내역은 결제 완료 후 즉시 대시보드에 반영됩니다. 배송이 필요한 제휴 상품을 향후 제공하는 경우 실제 주소는 가상 주소와
             센터 중계 방식으로 보호하고, 배송비와 예상 배송일은 별도 안내합니다.
           </p>
         </article>
@@ -1226,7 +1326,7 @@ function Footer() {
       <div className="footer-grid">
         <div>
           <b>{businessInfo.shopName}</b>
-          <p>{businessInfo.serviceName} · 인플루언서 후원, 알림톡, DM 커뮤니티 서비스</p>
+          <p>{businessInfo.serviceName} · 포인트 충전, 디지털 콘텐츠, DM 이용권, 멤버십 서비스</p>
         </div>
         <div>
           <span>대표자: {businessInfo.representative}</span>

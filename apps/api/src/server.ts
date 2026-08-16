@@ -75,7 +75,7 @@ const categories: Category[] = [
   {
     id: 'digital',
     name: 'Digital',
-    description: '구독권, 소프트웨어, 디지털 작업 도구를 위한 후원',
+    description: '구독권, 소프트웨어, 디지털 콘텐츠 패스와 멤버십 이용권',
     imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900'
   }
 ];
@@ -103,11 +103,11 @@ const creators: Creator[] = [
       },
       {
         id: 'wi_2',
-        title: '카페 작업 후원',
+        title: '카페 작업 디지털 에디션',
         price: 15000,
         categoryId: 'lifestyle',
         imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-        note: '편집하는 날 커피 한 잔으로 힘을 보탤 수 있어요.'
+        note: '편집 비하인드 사진과 작업 노트를 열람할 수 있습니다.'
       }
     ]
   },
@@ -125,11 +125,11 @@ const creators: Creator[] = [
     wishlist: [
       {
         id: 'wi_3',
-        title: '방송 소품 후원',
+        title: '방송 비하인드 콘텐츠 패스',
         price: 30000,
         categoryId: 'streaming',
         imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-        note: '방송 배경을 더 깔끔하게 꾸미는 데 사용합니다.'
+        note: '방송 비하인드 영상과 전용 공지를 이용할 수 있습니다.'
       },
       {
         id: 'wi_4',
@@ -316,8 +316,8 @@ app.post('/api/supports', (req, res) => {
     id: `nt_${nanoid(8)}`,
     creatorId: creator.id,
     channel: 'KAKAO_ALIMTALK',
-    title: '새 후원이 도착했습니다',
-    body: `${input.supporterName}님이 ${input.amount.toLocaleString()}원을 후원했습니다.`,
+    title: '새 디지털 상품 주문이 접수되었습니다',
+    body: `${input.supporterName}님의 ${input.amount.toLocaleString()}원 디지털 상품 주문이 접수되었습니다.`,
     createdAt: new Date().toISOString()
   });
   res.status(201).json(support);

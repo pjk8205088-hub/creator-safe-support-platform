@@ -8,10 +8,10 @@ export const MoneySchema = z.object({
   currency: z.literal('KRW')
 });
 
-export const GiftStatus = z.enum(['PENDING_PAYMENT', 'PAID', 'ORDERED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']);
-export type GiftStatus = z.infer<typeof GiftStatus>;
+export const DigitalOrderStatus = z.enum(['PENDING_PAYMENT', 'PAID', 'PROVISIONING', 'ACTIVE', 'CANCELLED', 'REFUNDED']);
+export type DigitalOrderStatus = z.infer<typeof DigitalOrderStatus>;
 
-export const CreateSupportSchema = z.object({
+export const CreateDigitalOrderSchema = z.object({
   creatorId: z.string().min(1),
   wishlistItemId: z.string().optional(),
   supporterName: z.string().min(1).max(30),
@@ -19,7 +19,13 @@ export const CreateSupportSchema = z.object({
   amount: z.number().int().min(1000),
   paymentProvider: z.enum(['TOSS', 'KAKAO_PAY', 'PORTONE', 'MOCK'])
 });
-export type CreateSupportInput = z.infer<typeof CreateSupportSchema>;
+export type CreateDigitalOrderInput = z.infer<typeof CreateDigitalOrderSchema>;
+
+// Backward-compatible aliases for the existing API route while the database migration is staged.
+export const GiftStatus = DigitalOrderStatus;
+export type GiftStatus = DigitalOrderStatus;
+export const CreateSupportSchema = CreateDigitalOrderSchema;
+export type CreateSupportInput = CreateDigitalOrderInput;
 
 export const CreatorProfileSchema = z.object({
   displayName: z.string(),
