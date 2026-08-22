@@ -1033,11 +1033,11 @@ function CheckoutPage({
             </div>
             <div>
               <dt>지급 대상</dt>
-              <dd>관리자 페이지 / 인플러언서 계정</dd>
+              <dd>eon8.co.kr 관리자 페이지 / 인플러언서 계정</dd>
             </div>
           </dl>
           <p className="checkout-note">
-            결제 승인이 끝나면 관리자 페이지에는 수수료와 지급액이 남고, 인플러언서 대시보드에는 주문과 지급 예정 내역이 표시됩니다.
+            결제 승인이 끝나면 eon8.co.kr 관리자 페이지에는 수수료와 지급액이 남고, 인플러언서 대시보드에는 주문과 지급 예정 내역이 표시됩니다.
           </p>
         </article>
         <aside className="checkout-panel">
