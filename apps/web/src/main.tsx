@@ -56,10 +56,21 @@ type Creator = {
 type Support = {
   id: string;
   creatorId: string;
+  creatorName?: string;
+  creatorHandle?: string;
+  creatorInstagramId?: string;
   supporterName: string;
+  supporterId?: string;
+  supporterEmail?: string;
   message?: string;
   amount: number;
+  paymentProvider?: string;
+  paymentKey?: string;
   status: string;
+  adminFee?: number;
+  creatorPayout?: number;
+  payoutDestination?: string;
+  payoutStatus?: string;
   createdAt: string;
 };
 
@@ -88,6 +99,28 @@ type PointPackage = {
   points: number;
   price: number;
   description: string;
+};
+
+type CheckoutDraft = {
+  creatorId: string;
+  creatorName: string;
+  creatorHandle: string;
+  wishlistItemId: string;
+  itemTitle: string;
+  amount: number;
+  message: string;
+  supporterName: string;
+  paymentProvider: 'NICEPAY';
+};
+
+type PaymentOrderResponse = {
+  orderId: string;
+  paymentProvider: string;
+  amount: number;
+  adminFee: number;
+  creatorPayout: number;
+  payoutDestination: string;
+  paymentKey: string;
 };
 
 const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ? 'http://localhost:4000' : '');
@@ -304,6 +337,7 @@ function App() {
     message: '늘 좋은 콘텐츠 고마워요!',
     paymentProvider: 'NICEPAY'
   });
+  const [checkoutDraft, setCheckoutDraft] = useState<CheckoutDraft | null>(null);
   const [walletPoints, setWalletPoints] = useState(readWalletPoints);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -355,6 +389,11 @@ function App() {
     });
   }, [activeCategory, creators, searchQuery]);
   const revenue = useMemo(() => supports.reduce((sum, item) => sum + item.amount, 0), [supports]);
+  const adminFeeTotal = useMemo(() => supports.reduce((sum, item) => sum + Number((item as Support & { adminFee?: number }).adminFee || 0), 0), [supports]);
+  const creatorPayoutTotal = useMemo(
+    () => supports.reduce((sum, item) => sum + Number((item as Support & { creatorPayout?: number }).creatorPayout || 0), 0),
+    [supports]
+  );
 
   function chargePoints(pointPackage: PointPackage) {
     const nextPoints = walletPoints + pointPackage.points;
@@ -363,49 +402,20 @@ function App() {
     location.hash = 'wallet';
   }
 
-  async function submitSupport(item: WishlistItem) {
+  function beginCheckout(item: WishlistItem) {
     if (!selected) return;
-    if (walletPoints < item.price) {
-      location.hash = 'wallet';
-      return;
-    }
-    const body = {
-      ...supportForm,
+    setCheckoutDraft({
       creatorId: selected.id,
+      creatorName: selected.displayName,
+      creatorHandle: selected.handle,
       wishlistItemId: item.id,
-      amount: item.price
-    };
-    if (API) {
-      const response = await fetch(`${API}/api/supports`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }).catch(() => null);
-      if (response?.ok) {
-        const nextPoints = walletPoints - item.price;
-        saveWalletPoints(nextPoints);
-        setWalletPoints(nextPoints);
-        await load();
-        location.hash = 'success';
-        return;
-      }
-    }
-    const support: Support = {
-      id: `sp_${Date.now()}`,
-      creatorId: selected.id,
-      supporterName: body.supporterName,
-      message: body.message,
-      amount: body.amount,
-      status: 'PAID',
-      createdAt: new Date().toISOString()
-    };
-    const nextSupports = [support, ...supports];
-    saveStoredSupports(nextSupports);
-    setSupports(nextSupports);
-    const nextPoints = walletPoints - item.price;
-    saveWalletPoints(nextPoints);
-    setWalletPoints(nextPoints);
-    location.hash = 'success';
+      itemTitle: item.title,
+      amount: item.price,
+      message: supportForm.message,
+      supporterName: supportForm.supporterName,
+      paymentProvider: 'NICEPAY'
+    });
+    location.hash = 'checkout';
   }
 
   async function logout() {
@@ -442,14 +452,30 @@ function App() {
         />
       )}
       {page.startsWith('creator/') && selected && (
-        <CreatorPage creator={selected} form={supportForm} setForm={setSupportForm} submitSupport={submitSupport} walletPoints={walletPoints} />
+        <CreatorPage creator={selected} form={supportForm} setForm={setSupportForm} beginCheckout={beginCheckout} walletPoints={walletPoints} />
+      )}
+      {page === 'checkout' && checkoutDraft && (
+        <CheckoutPage
+          draft={checkoutDraft}
+          onCancel={() => {
+            location.hash = `creator/${selected?.slug || checkoutDraft.creatorId}`;
+          }}
+          onComplete={async (order, support) => {
+            if (support) {
+              setSupports(prev => [support, ...prev.filter(item => item.id !== support.id)]);
+            }
+            await load();
+            setCheckoutDraft(null);
+            location.hash = 'success';
+          }}
+        />
       )}
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
       {page === 'success' && <Success />}
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
-      {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} />}
+      {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} adminFeeTotal={adminFeeTotal} creatorPayoutTotal={creatorPayoutTotal} />}
       {page === 'business' && <BusinessPage />}
       {page === 'policies' && <PolicyPage />}
       <Footer />
@@ -520,14 +546,22 @@ function Home({
         <div className="hero-overlay">
           <span className="eyebrow">
             <Sparkles size={16} />
-            포인트 기반 디지털 콘텐츠 플랫폼
+            포인트 기반 인플러언서 소통 플랫폼
           </span>
-          <h1>포인트를 충전하고 크리에이터의 디지털 콘텐츠를 이용하세요.</h1>
-          <p>인플러언서 코리아는 포인트 충전, 디지털 콘텐츠, DM 이용권, 기간형 멤버십을 연결합니다.</p>
+          <h1>포인트를 충전하고 인플러언서와 소통해보세요.</h1>
+          <p>인플러언서 코리아는 포인트 충전, 소통형 콘텐츠, DM 이용권, 기간형 멤버십을 연결합니다.</p>
           <div className="hero-actions">
             <SearchBox value={query} onChange={setQuery} />
             <a className="solid-button large" href={session ? '#dashboard' : '#signup'}>
               {session ? '내 대시보드' : '간편 가입'}
+              <ArrowRight size={18} />
+            </a>
+            <a className="ghost-button large" href="#categories">
+              결제 시작
+              <ArrowRight size={18} />
+            </a>
+            <a className="ghost-button large" href="https://app.litt.ly/login" target="_blank" rel="noreferrer">
+              litt.ly 로그인 연결
               <ArrowRight size={18} />
             </a>
           </div>
@@ -538,7 +572,7 @@ function Home({
           <div>
             <span className="kicker">Point Wallet</span>
             <h2>포인트 충전</h2>
-            <p>충전 포인트는 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다. 현금 환전과 계정 간 이전은 지원하지 않습니다.</p>
+          <p>충전 포인트는 소통형 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다. 현금 환전과 계정 간 이전은 지원하지 않습니다.</p>
           </div>
           <a className="solid-button" href="#wallet">
             보유 포인트 {walletPoints.toLocaleString()}P
@@ -574,7 +608,7 @@ function Home({
         <div className="section-head">
           <div>
             <span className="kicker">Influencers</span>
-            <h2>인플루언서 디지털 콘텐츠</h2>
+          <h2>인플러언서와 소통하는 페이지</h2>
           </div>
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
@@ -582,7 +616,7 @@ function Home({
       <section className="content-band">
         <div className="steps">
           <Step icon={<WalletCards />} title="포인트 충전" text="NICEPAY 등 계약된 결제수단으로 포인트를 충전합니다." />
-          <Step icon={<CreditCard />} title="디지털 상품 구매" text="콘텐츠 패스, DM 이용권, 기간형 멤버십을 포인트로 구매합니다." />
+          <Step icon={<CreditCard />} title="소통형 상품 이용" text="콘텐츠 패스, DM 이용권, 기간형 멤버십을 포인트로 이용합니다." />
           <Step icon={<Bell />} title="이용 알림" text="결제와 디지털 상품 제공 상태를 카카오 알림톡으로 안내합니다." />
         </div>
       </section>
@@ -643,7 +677,7 @@ function MvpSpecSection() {
           <span className="kicker">Service Blueprint</span>
           <h2>인플러언서 코리아 기능 명세</h2>
           <p>
-            MVP는 포인트 충전, 디지털 상품 제공, 크리에이터 대시보드, DM 커뮤니티를 우선순위로 구성합니다.
+            MVP는 포인트 충전, 소통형 상품 제공, 크리에이터 대시보드, DM 커뮤니티를 우선순위로 구성합니다.
           </p>
         </div>
       </div>
@@ -652,7 +686,7 @@ function MvpSpecSection() {
           <h3>팬 기능</h3>
           <ul>
             <li>카카오/네이버 간편 회원가입</li>
-            <li>인플루언서 디지털 콘텐츠 조회</li>
+            <li>인플러언서와 소통형 콘텐츠 조회</li>
             <li>NICEPAY 기반 간편결제</li>
             <li>메시지 카드 작성 및 전송</li>
           </ul>
@@ -709,7 +743,7 @@ function Catalog({
         <div>
           <span className="kicker">Browse</span>
           <h1>{active ? active.name : '서비스 기능 탐색'}</h1>
-          <p>{active ? active.description : '포인트 충전, 디지털 콘텐츠, DM 이용권, 멤버십 기능을 한눈에 확인하세요.'}</p>
+          <p>{active ? active.description : '포인트 충전, 소통형 콘텐츠, DM 이용권, 멤버십 기능을 한눈에 확인하세요.'}</p>
         </div>
         <SearchBox value={query} onChange={setQuery} compact />
       </div>
@@ -800,13 +834,13 @@ function CreatorPage({
   creator,
   form,
   setForm,
-  submitSupport,
+  beginCheckout,
   walletPoints
 }: {
   creator: Creator;
   form: SupportForm;
   setForm: (value: SupportForm) => void;
-  submitSupport: (item: WishlistItem) => void;
+  beginCheckout: (item: WishlistItem) => void;
   walletPoints: number;
 }) {
   return (
@@ -841,8 +875,8 @@ function CreatorPage({
                 </div>
                 <div className="wish-footer">
                   <b>{item.price.toLocaleString()}P</b>
-                  <button className="ghost-button" type="button" onClick={() => submitSupport(item)}>
-                    구매
+                  <button className="ghost-button" type="button" onClick={() => beginCheckout(item)}>
+                    결제하기
                   </button>
                 </div>
               </article>
@@ -866,6 +900,168 @@ function CreatorPage({
             <WalletCards size={18} />
             포인트 충전하기
           </a>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function CheckoutPage({
+  draft,
+  onCancel,
+  onComplete
+}: {
+  draft: CheckoutDraft;
+  onCancel: () => void;
+  onComplete: (order: PaymentOrderResponse, support?: Support) => Promise<void> | void;
+}) {
+  const [provider, setProvider] = useState<'NICEPAY'>('NICEPAY');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const adminFee = Math.round((draft.amount * 25) / 100);
+  const creatorPayout = draft.amount - adminFee;
+
+  async function pay() {
+    setBusy(true);
+    setError('');
+    const payload = {
+      creatorId: draft.creatorId,
+      wishlistItemId: draft.wishlistItemId,
+      supporterName: draft.supporterName,
+      message: draft.message,
+      amount: draft.amount,
+      paymentProvider: provider
+    };
+
+    try {
+      if (API) {
+        const response = await fetch(`${API}/api/payments/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          throw new Error(`주문 생성 실패 (${response.status})`);
+        }
+        const order = (await response.json()) as PaymentOrderResponse;
+        const confirm = await fetch(`${API}/api/payments/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: order.orderId, paymentKey: order.paymentKey })
+        });
+        if (!confirm.ok) {
+          throw new Error(`결제 승인 실패 (${confirm.status})`);
+        }
+        const confirmed = await confirm.json();
+        await onComplete(order, {
+          id: confirmed.supportId ?? `sp_${Date.now()}`,
+          creatorId: draft.creatorId,
+          supporterName: draft.supporterName,
+          message: draft.message,
+          amount: draft.amount,
+          status: 'PAID',
+          adminFee: confirmed.adminFee ?? order.adminFee,
+          creatorPayout: confirmed.creatorPayout ?? order.creatorPayout,
+          payoutDestination: confirmed.payoutDestination ?? order.payoutDestination,
+          payoutStatus: confirmed.payoutStatus ?? 'PENDING',
+          createdAt: new Date().toISOString()
+        });
+        return;
+      }
+
+      const fallbackOrder: PaymentOrderResponse = {
+        orderId: `ord_${Date.now()}`,
+        paymentProvider: provider,
+        amount: draft.amount,
+        adminFee,
+        creatorPayout,
+        payoutDestination: 'ADMIN_DASHBOARD',
+        paymentKey: `mock_${Date.now()}`
+      };
+      const support: Support = {
+        id: `sp_${Date.now()}`,
+        creatorId: draft.creatorId,
+        supporterName: draft.supporterName,
+        message: draft.message,
+        amount: draft.amount,
+        status: 'PAID',
+        adminFee,
+        creatorPayout,
+        payoutDestination: 'ADMIN_DASHBOARD',
+        payoutStatus: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+      saveStoredSupports([support, ...readStoredSupports()]);
+      await onComplete(fallbackOrder, support);
+    } catch (error_) {
+      setError(error_ instanceof Error ? error_.message : '결제를 완료할 수 없습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="page-shell">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Checkout</span>
+          <h1>{draft.creatorName} 결제창</h1>
+          <p>이 화면에서 PG 주문을 만들고, 승인 후 관리자 정산과 인플러언서 지급 예정액을 함께 기록합니다.</p>
+        </div>
+        <a className="ghost-button" href="https://app.litt.ly/page" target="_blank" rel="noreferrer">
+          litt.ly 결제 페이지 열기
+        </a>
+      </div>
+      <div className="checkout-layout">
+        <article className="checkout-summary">
+          <span className="kicker">Order Summary</span>
+          <h2>{draft.itemTitle}</h2>
+          <p>{draft.creatorHandle}</p>
+          <dl>
+            <div>
+              <dt>결제 금액</dt>
+              <dd>{draft.amount.toLocaleString()}원</dd>
+            </div>
+            <div>
+              <dt>관리자 수수료</dt>
+              <dd>{adminFee.toLocaleString()}원</dd>
+            </div>
+            <div>
+              <dt>인플러언서 지급액</dt>
+              <dd>{creatorPayout.toLocaleString()}원</dd>
+            </div>
+            <div>
+              <dt>지급 대상</dt>
+              <dd>관리자 페이지 / 인플러언서 계정</dd>
+            </div>
+          </dl>
+          <p className="checkout-note">
+            결제 승인이 끝나면 관리자 페이지에는 수수료와 지급액이 남고, 인플러언서 대시보드에는 주문과 지급 예정 내역이 표시됩니다.
+          </p>
+        </article>
+        <aside className="checkout-panel">
+          <label>
+            결제수단
+            <select value={provider} onChange={event => setProvider(event.target.value as 'NICEPAY')}>
+              <option value="NICEPAY">NICEPAY</option>
+            </select>
+          </label>
+          <label>
+            팬 이름
+            <input value={draft.supporterName} readOnly />
+          </label>
+          <label>
+            메시지
+            <textarea value={draft.message} readOnly />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="solid-button large" type="button" onClick={pay} disabled={busy}>
+            {busy ? '결제 처리 중' : `${draft.amount.toLocaleString()}원 결제하기`}
+          </button>
+          <button className="ghost-button large" type="button" onClick={onCancel}>
+            돌아가기
+          </button>
         </aside>
       </div>
     </section>
@@ -1082,8 +1278,8 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
       <div className="section-head">
         <div>
           <span className="kicker">Dashboard</span>
-          <h1>{session ? `${session.user.name}님의 대시보드` : '인플루언서 대시보드'}</h1>
-          <p>포인트 충전, 디지털 상품 제공, 카카오 알림톡, DM 흐름을 한 번에 확인합니다.</p>
+          <h1>{session ? `${session.user.name}님의 대시보드` : '인플러언서 대시보드'}</h1>
+          <p>포인트 충전, 결제 승인, 관리자 정산, DM 흐름을 한 번에 확인합니다.</p>
         </div>
         {!session && (
           <a className="solid-button" href="#login">
@@ -1093,9 +1289,9 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         )}
       </div>
       <div className="stats">
-        <Stat icon={<HeartHandshake />} label="디지털 상품 주문" value={`${supports.length}건`} />
-        <Stat icon={<CreditCard />} label="총액" value={`${revenue.toLocaleString()}원`} />
-        <Stat icon={<Bell />} label="상품 제공 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
+        <Stat icon={<HeartHandshake />} label="결제 완료" value={`${supports.length}건`} />
+        <Stat icon={<CreditCard />} label="총 결제액" value={`${revenue.toLocaleString()}원`} />
+        <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
       <SupportTable supports={supports} />
     </section>
@@ -1105,11 +1301,15 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
 function Admin({
   supports,
   creators,
-  categories
+  categories,
+  adminFeeTotal,
+  creatorPayoutTotal
 }: {
   supports: Support[];
   creators: Creator[];
   categories: Category[];
+  adminFeeTotal: number;
+  creatorPayoutTotal: number;
 }) {
   return (
     <section className="page-shell">
@@ -1117,13 +1317,15 @@ function Admin({
         <div>
           <span className="kicker">Admin</span>
           <h1>운영 관리</h1>
-          <p>NICEPAY 승인, 상품 제공, 팬 등급, DM 상태를 점검합니다.</p>
+          <p>NICEPAY 승인, 관리자 수수료, 인플러언서 지급액, DM 상태를 점검합니다.</p>
         </div>
       </div>
       <div className="stats">
         <Stat icon={<Grid3X3 />} label="카테고리" value={`${categories.length}개`} />
         <Stat icon={<HeartHandshake />} label="인플루언서" value={`${creators.length}명`} />
         <Stat icon={<CreditCard />} label="포인트 충전/상품 주문" value={`${supports.length}건`} />
+        <Stat icon={<WalletCards />} label="관리자 수수료" value={`${adminFeeTotal.toLocaleString()}원`} />
+        <Stat icon={<LayoutDashboard />} label="인플러언서 지급액" value={`${creatorPayoutTotal.toLocaleString()}원`} />
       </div>
       <SupportTable supports={supports} />
     </section>
@@ -1140,6 +1342,9 @@ function SupportTable({ supports }: { supports: Support[] }) {
         <tr>
           <th>구매자</th>
           <th>금액</th>
+          <th>관리자 수수료</th>
+          <th>인플러언서 지급액</th>
+          <th>지급 상태</th>
           <th>상태</th>
           <th>메시지</th>
         </tr>
@@ -1149,6 +1354,9 @@ function SupportTable({ supports }: { supports: Support[] }) {
           <tr key={support.id}>
             <td>{support.supporterName}</td>
             <td>{support.amount.toLocaleString()}원</td>
+            <td>{(support.adminFee ?? 0).toLocaleString()}원</td>
+            <td>{(support.creatorPayout ?? support.amount).toLocaleString()}원</td>
+            <td>{support.payoutStatus ?? 'PENDING'}</td>
             <td>{support.status}</td>
             <td>{support.message}</td>
           </tr>

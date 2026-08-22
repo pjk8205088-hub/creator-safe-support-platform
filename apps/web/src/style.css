@@ -527,6 +527,85 @@ table {
   margin-top: 0;
 }
 
+.checkout-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.checkout-summary,
+.checkout-panel {
+  background: #fffdf8;
+  border: 1px solid #ded8cc;
+  border-radius: 8px;
+  box-shadow: 0 16px 38px rgba(23, 32, 35, 0.06);
+  padding: 24px;
+}
+
+.checkout-summary h2 {
+  margin: 8px 0 6px;
+  font-size: 32px;
+}
+
+.checkout-summary p {
+  margin: 0;
+  color: #53605c;
+}
+
+.checkout-summary dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 0;
+}
+
+.checkout-summary dl div {
+  padding: 12px 14px;
+  border: 1px solid #ebe6da;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.checkout-summary dt {
+  color: #53605c;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.checkout-summary dd {
+  margin: 6px 0 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.checkout-note {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #f0ebe1;
+  color: #53605c;
+  line-height: 1.6;
+}
+
+.checkout-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.checkout-panel select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #d8d1c3;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fffdf8;
+}
+
+.checkout-panel .large {
+  justify-content: center;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -883,6 +962,7 @@ footer {
 
   .section-head,
   .creator-layout,
+  .checkout-layout,
   .footer-grid {
     grid-template-columns: 1fr;
   }

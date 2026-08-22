@@ -17,7 +17,7 @@ export const CreateDigitalOrderSchema = z.object({
   supporterName: z.string().min(1).max(30),
   message: z.string().max(500).optional(),
   amount: z.number().int().min(1000),
-  paymentProvider: z.enum(['TOSS', 'KAKAO_PAY', 'PORTONE', 'MOCK'])
+  paymentProvider: z.enum(['NICEPAY', 'TOSS', 'KAKAO_PAY', 'PORTONE', 'MOCK'])
 });
 export type CreateDigitalOrderInput = z.infer<typeof CreateDigitalOrderSchema>;
 

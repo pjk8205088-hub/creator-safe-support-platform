@@ -46,6 +46,29 @@ type Creator = {
   }[];
 };
 
+type PaymentOrder = {
+  id: string;
+  creatorId: string;
+  creatorName: string;
+  creatorHandle: string;
+  creatorInstagramId?: string;
+  wishlistItemId?: string;
+  supporterName: string;
+  supporterId: string;
+  supporterEmail: string;
+  message?: string;
+  amount: number;
+  paymentProvider: string;
+  paymentKey: string;
+  status: 'PENDING_PAYMENT' | 'PAID' | 'PROVISIONING' | 'ACTIVE' | 'CANCELLED' | 'REFUNDED';
+  adminFee: number;
+  creatorPayout: number;
+  payoutDestination: 'ADMIN_DASHBOARD' | 'CREATOR_ACCOUNT';
+  payoutStatus: 'PENDING' | 'SENT' | 'FAILED';
+  createdAt: string;
+  paidAt?: string;
+};
+
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
@@ -188,6 +211,8 @@ const users: User[] = [
 const sessions = new Map<string, string>();
 const supports: any[] = [];
 const notifications: any[] = [];
+const paymentOrders: PaymentOrder[] = [];
+const adminCommissionRate = Number(process.env.ADMIN_COMMISSION_RATE ?? 25);
 
 const AuthSchema = z.object({
   email: z.string().email(),
@@ -304,10 +329,16 @@ app.post('/api/supports', (req, res) => {
   const input = parsed.data;
   const creator = creators.find(item => item.id === input.creatorId);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  const adminFee = Math.round((input.amount * adminCommissionRate) / 100);
+  const creatorPayout = input.amount - adminFee;
   const support = {
     id: `sp_${nanoid(8)}`,
     ...input,
     status: 'PAID',
+    adminFee,
+    creatorPayout,
+    payoutDestination: 'ADMIN_DASHBOARD',
+    payoutStatus: 'PENDING',
     paymentKey: `mock_${nanoid(10)}`,
     createdAt: new Date().toISOString()
   };
@@ -323,13 +354,109 @@ app.post('/api/supports', (req, res) => {
   res.status(201).json(support);
 });
 
+app.post('/api/payments/orders', (req, res) => {
+  const parsed = CreateSupportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
+  const input = parsed.data;
+  const creator = creators.find(item => item.id === input.creatorId);
+  if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  const adminFee = Math.round((input.amount * adminCommissionRate) / 100);
+  const creatorPayout = input.amount - adminFee;
+  const order: PaymentOrder = {
+    id: `ord_${nanoid(10)}`,
+    creatorId: creator.id,
+    creatorName: creator.displayName,
+    creatorHandle: creator.handle,
+    creatorInstagramId: creator.id ? `@${creator.slug}` : undefined,
+    wishlistItemId: input.wishlistItemId,
+    supporterName: input.supporterName,
+    supporterId: `guest_${nanoid(6)}`,
+    supporterEmail: 'guest@eon8.co.kr',
+    message: input.message,
+    amount: input.amount,
+    paymentProvider: input.paymentProvider,
+    paymentKey: `pending_${nanoid(12)}`,
+    status: 'PENDING_PAYMENT',
+    adminFee,
+    creatorPayout,
+    payoutDestination: 'ADMIN_DASHBOARD',
+    payoutStatus: 'PENDING',
+    createdAt: new Date().toISOString()
+  };
+  paymentOrders.unshift(order);
+  res.status(201).json({
+    orderId: order.id,
+    paymentProvider: order.paymentProvider,
+    amount: order.amount,
+    adminFee: order.adminFee,
+    creatorPayout: order.creatorPayout,
+    payoutDestination: order.payoutDestination,
+    paymentKey: order.paymentKey
+  });
+});
+
+app.post('/api/payments/confirm', (req, res) => {
+  const schema = z.object({
+    orderId: z.string().min(1),
+    paymentKey: z.string().min(1)
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
+  const order = paymentOrders.find(item => item.id === parsed.data.orderId);
+  if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+  if (order.paymentKey !== parsed.data.paymentKey) return res.status(400).json({ code: 'PAYMENT_KEY_MISMATCH' });
+  if (order.status === 'PAID') return res.json(order);
+
+  order.status = 'PAID';
+  order.paidAt = new Date().toISOString();
+  const support = {
+    id: `sp_${nanoid(8)}`,
+    creatorId: order.creatorId,
+    creatorName: order.creatorName,
+    creatorHandle: order.creatorHandle,
+    creatorInstagramId: order.creatorInstagramId,
+    supporterName: order.supporterName,
+    supporterId: order.supporterId,
+    supporterEmail: order.supporterEmail,
+    message: order.message,
+    amount: order.amount,
+    paymentProvider: order.paymentProvider,
+    adminFee: order.adminFee,
+    creatorPayout: order.creatorPayout,
+    payoutDestination: order.payoutDestination,
+    payoutStatus: 'PENDING',
+    status: 'PAID',
+    paymentKey: order.paymentKey,
+    createdAt: order.paidAt
+  };
+  supports.unshift(support);
+  notifications.unshift({
+    id: `nt_${nanoid(8)}`,
+    creatorId: order.creatorId,
+    channel: 'PG_SETTLEMENT',
+    title: '결제가 승인되었습니다',
+    body: `${order.supporterName}님의 ${order.amount.toLocaleString()}원 결제가 승인되었고, 관리자 정산 ${order.adminFee.toLocaleString()}원 / 인플러언서 지급 ${order.creatorPayout.toLocaleString()}원으로 기록되었습니다.`,
+    createdAt: order.paidAt
+  });
+  res.json({
+    ...order,
+    supportId: support.id,
+    support,
+    payoutDestination: order.payoutDestination,
+    payoutStatus: support.payoutStatus
+  });
+});
+
 app.get('/api/supports', (_req, res) => res.json(supports));
+app.get('/api/payments/orders', (_req, res) => res.json(paymentOrders));
 app.get('/api/admin/summary', (_req, res) =>
   res.json({
     creators: creators.length,
     users: users.length,
     supports: supports.length,
     revenue: supports.reduce((sum, item) => sum + item.amount, 0),
+    adminFeeTotal: supports.reduce((sum, item) => sum + (item.adminFee ?? 0), 0),
+    creatorPayoutTotal: supports.reduce((sum, item) => sum + (item.creatorPayout ?? 0), 0),
     openReports: 0,
     pendingSettlements: supports.filter(item => item.status === 'PAID').length
   })
