@@ -1140,8 +1140,8 @@ function AuthPage({
   setSession: (session: Session | null) => void;
 }) {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState(mode === 'login' ? 'creator@example.com' : '');
-  const [password, setPassword] = useState(mode === 'login' ? 'password123' : '');
+  const [email, setEmail] = useState(mode === 'login' ? 'hspjjang@naver.com' : '');
+  const [password, setPassword] = useState(mode === 'login' ? '1111' : '');
   const [role, setRole] = useState<'FAN' | 'CREATOR'>('CREATOR');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1167,7 +1167,7 @@ function AuthPage({
     }
 
     setBusy(false);
-    if (mode === 'login' && email !== 'creator@example.com' && password.length < 8) {
+    if (mode === 'login' && (!email || !password)) {
       setError('이메일과 비밀번호를 확인해주세요.');
       return;
     }
@@ -1251,10 +1251,9 @@ function AuthPage({
           비밀번호
           <input
             type="password"
-            minLength={8}
             value={password}
             onChange={event => setPassword(event.target.value)}
-            placeholder="8자 이상"
+            placeholder="비밀번호 입력"
             required
           />
         </label>

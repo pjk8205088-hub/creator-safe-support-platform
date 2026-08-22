@@ -192,8 +192,8 @@ const users: User[] = [
   {
     id: 'usr_demo_creator',
     name: '하나 스튜디오',
-    email: 'creator@example.com',
-    password: 'password123',
+    email: 'hspjjang@naver.com',
+    password: '1111',
     role: 'CREATOR',
     creatorSlug: 'hana',
     createdAt: new Date().toISOString()
