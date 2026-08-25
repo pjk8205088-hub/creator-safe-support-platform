@@ -1,19 +1,28 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  BadgeCheck,
+  BarChart3,
   ArrowRight,
+  BriefcaseBusiness,
   Bell,
   Check,
+  CircleDollarSign,
   CreditCard,
+  FileText,
   Grid3X3,
   HeartHandshake,
   LayoutDashboard,
+  PanelLeft,
   LockKeyhole,
   LogIn,
   LogOut,
+  ReceiptText,
   Search,
   ShieldCheck,
   Sparkles,
+  Users,
+  UserRoundPlus,
   UserPlus,
   WalletCards
 } from 'lucide-react';
@@ -1310,58 +1319,336 @@ function Admin({
   adminFeeTotal: number;
   creatorPayoutTotal: number;
 }) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const paymentRows = useMemo(() => {
+    return supports
+      .filter(item => {
+        if (!normalizedQuery) return true;
+        const text = [
+          item.id,
+          item.creatorName ?? '',
+          item.creatorHandle ?? '',
+          item.creatorInstagramId ?? '',
+          item.supporterName,
+          item.supporterEmail ?? '',
+          item.supporterId ?? '',
+          item.message ?? ''
+        ]
+          .join(' ')
+          .toLowerCase();
+        return text.includes(normalizedQuery);
+      })
+      .slice(0, 8);
+  }, [supports, normalizedQuery]);
+
+  const creatorRows = useMemo(() => {
+    return creators.map(creator => {
+      const total = supports
+        .filter(item => item.creatorId === creator.id)
+        .reduce((sum, item) => sum + item.amount, 0);
+      return {
+        ...creator,
+        total,
+        status: total > 0 ? '활성' : '대기'
+      };
+    });
+  }, [creators, supports]);
+
+  const fanRows = useMemo(() => {
+    const map = new Map<string, { name: string; email: string; total: number; count: number; lastSeen: string }>();
+    supports.forEach(item => {
+      const key = item.supporterEmail ?? item.supporterName;
+      const current = map.get(key) ?? {
+        name: item.supporterName,
+        email: item.supporterEmail ?? '-',
+        total: 0,
+        count: 0,
+        lastSeen: item.createdAt
+      };
+      current.total += item.amount;
+      current.count += 1;
+      current.lastSeen = item.createdAt;
+      map.set(key, current);
+    });
+    return [...map.values()]
+      .sort((left, right) => right.total - left.total)
+      .map((item, index) => ({
+        ...item,
+        tier: index === 0 ? 'S' : index < 3 ? 'A' : index < 6 ? 'B' : 'C'
+      }));
+  }, [supports]);
+
+  const totalMembers = fanRows.length + creators.length + 1;
   return (
-    <section className="page-shell">
-      <div className="section-head">
-        <div>
-          <span className="kicker">Admin</span>
-          <h1>운영 관리</h1>
-          <p>NICEPAY 승인, 관리자 수수료, 인플러언서 지급액, DM 상태를 점검합니다.</p>
+    <section className="admin-lte-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-brand">
+          <span>IK</span>
+          <div>
+            <b>인플러언서 코리아</b>
+            <small>AdminLTE 4.8.5-style</small>
+          </div>
+        </div>
+        <nav>
+          <a href="#admin" className="active">
+            <PanelLeft size={16} />
+            대시보드
+          </a>
+          <a href="#admin-payments">
+            <ReceiptText size={16} />
+            결제 관리
+          </a>
+          <a href="#admin-fans">
+            <Users size={16} />
+            팬 회원가입
+          </a>
+          <a href="#admin-creators">
+            <UserRoundPlus size={16} />
+            인플러언서 가입
+          </a>
+          <a href="#admin-settlement">
+            <CircleDollarSign size={16} />
+            정산 현황
+          </a>
+          <a href="#admin-settings">
+            <BriefcaseBusiness size={16} />
+            설정
+          </a>
+        </nav>
+        <div className="admin-sidebar-foot">
+          <span>AdminLTE 기반 운영 패널</span>
+          <a href="https://github.com/ColorlibHQ/AdminLTE/releases" target="_blank" rel="noreferrer">
+            Release notes
+          </a>
+        </div>
+      </aside>
+
+      <div className="admin-main">
+        <header className="admin-topbar">
+          <div>
+            <span className="kicker">Admin</span>
+            <h1>운영 관리</h1>
+            <p>NICEPAY 승인, 결제, 팬 회원가입, 인플러언서 가입리스트를 한 번에 관리합니다.</p>
+          </div>
+          <label className="admin-search">
+            <Search size={16} />
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="결제번호, 팬, 인플러언서 검색" />
+          </label>
+        </header>
+
+        <div className="admin-info-grid">
+          <article className="small-box blue">
+            <div>
+              <span>포인트 주문</span>
+              <strong>{supports.length}</strong>
+            </div>
+            <BarChart3 />
+          </article>
+          <article className="small-box green">
+            <div>
+              <span>팬 회원가입</span>
+              <strong>{fanRows.length}</strong>
+            </div>
+            <Users />
+          </article>
+          <article className="small-box yellow">
+            <div>
+              <span>인플러언서 가입</span>
+              <strong>{creators.length}</strong>
+            </div>
+            <UserRoundPlus />
+          </article>
+          <article className="small-box purple">
+            <div>
+              <span>정산 대기액</span>
+              <strong>{adminFeeTotal.toLocaleString()}원</strong>
+            </div>
+            <WalletCards />
+          </article>
+        </div>
+
+        <div className="admin-grid">
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">결제 관리</span>
+                <h2>결제 및 정산 리스트</h2>
+              </div>
+              <span className="admin-badge">NICEPAY</span>
+            </div>
+            <PaymentTable supports={paymentRows} />
+          </section>
+
+          <section className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">요약</span>
+                <h2>핵심 지표</h2>
+              </div>
+            </div>
+            <div className="metric-list">
+              <div>
+                <span>카테고리</span>
+                <b>{categories.length}개</b>
+              </div>
+              <div>
+                <span>관리자 수수료</span>
+                <b>{adminFeeTotal.toLocaleString()}원</b>
+              </div>
+              <div>
+                <span>인플러언서 지급액</span>
+                <b>{creatorPayoutTotal.toLocaleString()}원</b>
+              </div>
+              <div>
+                <span>총 회원</span>
+                <b>{totalMembers}명</b>
+              </div>
+            </div>
+          </section>
+
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">팬 회원가입</span>
+                <h2>가입 팬 리스트</h2>
+              </div>
+              <span className="admin-badge light"><BadgeCheck size={14} /> 등급 관리</span>
+            </div>
+            <FanSignupTable fans={fanRows} />
+          </section>
+
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">인플러언서 가입</span>
+                <h2>가입 인플러언서 리스트</h2>
+              </div>
+              <span className="admin-badge light"><FileText size={14} /> 프로필 확인</span>
+            </div>
+            <CreatorSignupTable creators={creatorRows} />
+          </section>
         </div>
       </div>
-      <div className="stats">
-        <Stat icon={<Grid3X3 />} label="카테고리" value={`${categories.length}개`} />
-        <Stat icon={<HeartHandshake />} label="인플루언서" value={`${creators.length}명`} />
-        <Stat icon={<CreditCard />} label="포인트 충전/상품 주문" value={`${supports.length}건`} />
-        <Stat icon={<WalletCards />} label="관리자 수수료" value={`${adminFeeTotal.toLocaleString()}원`} />
-        <Stat icon={<LayoutDashboard />} label="인플러언서 지급액" value={`${creatorPayoutTotal.toLocaleString()}원`} />
-      </div>
-      <SupportTable supports={supports} />
     </section>
   );
 }
 
-function SupportTable({ supports }: { supports: Support[] }) {
+function PaymentTable({ supports }: { supports: Support[] }) {
   if (!supports.length) {
     return <div className="empty-state">아직 구매 내역이 없습니다.</div>;
   }
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>구매자</th>
-          <th>금액</th>
-          <th>관리자 수수료</th>
-          <th>인플러언서 지급액</th>
-          <th>지급 상태</th>
-          <th>상태</th>
-          <th>메시지</th>
-        </tr>
-      </thead>
-      <tbody>
-        {supports.map(support => (
-          <tr key={support.id}>
-            <td>{support.supporterName}</td>
-            <td>{support.amount.toLocaleString()}원</td>
-            <td>{(support.adminFee ?? 0).toLocaleString()}원</td>
-            <td>{(support.creatorPayout ?? support.amount).toLocaleString()}원</td>
-            <td>{support.payoutStatus ?? 'PENDING'}</td>
-            <td>{support.status}</td>
-            <td>{support.message}</td>
+    <div className="table-scroll">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>결제번호</th>
+            <th>팬</th>
+            <th>인플러언서</th>
+            <th>금액</th>
+            <th>관리자 수수료</th>
+            <th>지급액</th>
+            <th>PG</th>
+            <th>상태</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {supports.map(support => (
+            <tr key={support.id}>
+              <td>{support.id}</td>
+              <td>
+                <b>{support.supporterName}</b>
+                <small>{support.supporterEmail ?? support.supporterId ?? '-'}</small>
+              </td>
+              <td>
+                <b>{support.creatorName ?? support.creatorId}</b>
+                <small>{support.creatorInstagramId ?? support.creatorHandle ?? '-'}</small>
+              </td>
+              <td>{support.amount.toLocaleString()}원</td>
+              <td>{(support.adminFee ?? 0).toLocaleString()}원</td>
+              <td>{(support.creatorPayout ?? support.amount).toLocaleString()}원</td>
+              <td>{support.paymentProvider ?? 'NICEPAY'}</td>
+              <td>{support.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FanSignupTable({ fans }: { fans: { name: string; email: string; total: number; count: number; lastSeen: string; tier: string }[] }) {
+  if (!fans.length) {
+    return <div className="empty-state">아직 팬 가입 내역이 없습니다.</div>;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>팬 이름</th>
+            <th>이메일</th>
+            <th>후원 합계</th>
+            <th>횟수</th>
+            <th>등급</th>
+            <th>최근 활동</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fans.map(fan => (
+            <tr key={fan.email}>
+              <td>{fan.name}</td>
+              <td>{fan.email}</td>
+              <td>{fan.total.toLocaleString()}원</td>
+              <td>{fan.count}회</td>
+              <td><span className="tier-chip">{fan.tier}</span></td>
+              <td>{new Date(fan.lastSeen).toLocaleString('ko-KR')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CreatorSignupTable({
+  creators
+}: {
+  creators: { id: string; displayName: string; handle: string; avatarUrl: string; platform: string; total: number; status: string }[];
+}) {
+  if (!creators.length) {
+    return <div className="empty-state">아직 인플러언서 가입 내역이 없습니다.</div>;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>프로필</th>
+            <th>이름</th>
+            <th>아이디</th>
+            <th>플랫폼</th>
+            <th>누적 결제</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {creators.map(creator => (
+            <tr key={creator.id}>
+              <td>
+                <img className="table-avatar" src={creator.avatarUrl} alt="" />
+              </td>
+              <td>{creator.displayName}</td>
+              <td>{creator.handle}</td>
+              <td>{creator.platform}</td>
+              <td>{creator.total.toLocaleString()}원</td>
+              <td>{creator.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
