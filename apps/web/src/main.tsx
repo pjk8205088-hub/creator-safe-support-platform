@@ -484,6 +484,7 @@ function App() {
       {page === 'success' && <Success />}
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
+      {page === 'admin-login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} adminFeeTotal={adminFeeTotal} creatorPayoutTotal={creatorPayoutTotal} />}
       {page === 'business' && <BusinessPage />}
       {page === 'policies' && <PolicyPage />}
@@ -1154,15 +1155,24 @@ function AuthPage({
   const [role, setRole] = useState<'FAN' | 'CREATOR'>('CREATOR');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError('');
 
+    if (mode === 'login') {
+      const normalizedEmail = email.trim() || (isAdminLogin ? 'admin@influencer-korea.local' : 'demo@influencer-korea.local');
+      setBusy(false);
+      setSession(createDemoSession(isAdminLogin ? '관리자' : '하나 인플루언서', normalizedEmail, 'CREATOR'));
+      location.hash = isAdminLogin ? 'admin' : 'dashboard';
+      return;
+    }
+
     if (API) {
-      const path = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
-      const payload = mode === 'login' ? { email, password } : { name, email, password, role };
+      const path = '/api/auth/signup';
+      const payload = { name, email, password, role };
       const response = await fetch(`${API}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1176,11 +1186,7 @@ function AuthPage({
     }
 
     setBusy(false);
-    if (mode === 'login' && (!email || !password)) {
-      setError('이메일과 비밀번호를 확인해주세요.');
-      return;
-    }
-    setSession(createDemoSession(mode === 'login' ? '하나 인플루언서' : name || '새 인플루언서', email, role));
+    setSession(createDemoSession(name || '새 인플루언서', email || 'new@influencer-korea.local', role));
     location.hash = 'dashboard';
   }
 
@@ -1205,7 +1211,7 @@ function AuthPage({
     location.hash = 'dashboard';
   }
 
-  if (session) {
+  if (session && !isAdminLogin) {
     return (
       <section className="auth-shell">
         <div className="auth-card">
@@ -1225,9 +1231,12 @@ function AuthPage({
       <form className="auth-card" onSubmit={submit}>
         <span className="eyebrow">
           <LockKeyhole size={16} />
-          {mode === 'login' ? 'Welcome back' : 'Create account'}
+          {isAdminLogin ? 'Operations Access' : mode === 'login' ? 'Welcome back' : 'Create account'}
         </span>
-        <h1>{mode === 'login' ? '로그인' : '가입하기'}</h1>
+        <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? '로그인' : '가입하기'}</h1>
+        {isAdminLogin ? (
+          <p className="auth-copy">이 화면은 테스트용으로 열려 있습니다. 어떤 아이디와 비밀번호를 넣어도 관리자 화면으로 이동합니다.</p>
+        ) : null}
         <div className="social-row">
           {['Kakao', 'Naver', 'Instagram'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
@@ -1254,7 +1263,7 @@ function AuthPage({
         )}
         <label>
           이메일
-          <input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" required />
+          <input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder={isAdminLogin ? '아이디를 아무거나 입력하세요' : 'you@example.com'} required />
         </label>
         <label>
           비밀번호
@@ -1262,18 +1271,18 @@ function AuthPage({
             type="password"
             value={password}
             onChange={event => setPassword(event.target.value)}
-            placeholder="비밀번호 입력"
+            placeholder={isAdminLogin ? '비밀번호도 아무거나 입력하세요' : '비밀번호 입력'}
             required
           />
         </label>
         {error && <p className="form-error">{error}</p>}
         <button className="solid-button large" disabled={busy} type="submit">
           {mode === 'login' ? <LogIn size={18} /> : <UserPlus size={18} />}
-          {busy ? '처리 중' : mode === 'login' ? '로그인' : '계정 만들기'}
+          {busy ? '처리 중' : isAdminLogin ? '관리자 화면 열기' : mode === 'login' ? '로그인' : '계정 만들기'}
         </button>
         <p className="auth-switch">
-          {mode === 'login' ? '계정이 없나요?' : '이미 계정이 있나요?'}{' '}
-          <a href={mode === 'login' ? '#signup' : '#login'}>{mode === 'login' ? '가입하기' : '로그인'}</a>
+          {isAdminLogin ? '관리자 화면이 열리지 않으면 새로고침하세요.' : mode === 'login' ? '계정이 없나요?' : '이미 계정이 있나요?'}{' '}
+          {isAdminLogin ? <a href="#admin">관리자 화면 보기</a> : <a href={mode === 'login' ? '#signup' : '#login'}>{mode === 'login' ? '가입하기' : '로그인'}</a>}
         </p>
       </form>
     </section>
@@ -1320,6 +1329,18 @@ function Admin({
   creatorPayoutTotal: number;
 }) {
   const [query, setQuery] = useState('');
+  const [feeRate, setFeeRate] = useState(25);
+  const [fanDraft, setFanDraft] = useState({ name: '새 팬', email: '', level: 'B' });
+  const [creatorDraft, setCreatorDraft] = useState({
+    displayName: '새 인플러언서',
+    handle: '@new.creator',
+    platform: 'Instagram',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300'
+  });
+  const [localFans, setLocalFans] = useState<Array<{ name: string; email: string; total: number; count: number; lastSeen: string; tier: string }>>([]);
+  const [localCreators, setLocalCreators] = useState<
+    Array<{ id: string; displayName: string; handle: string; avatarUrl: string; platform: string; total: number; status: string }>
+  >([]);
   const normalizedQuery = query.trim().toLowerCase();
   const paymentRows = useMemo(() => {
     return supports
@@ -1379,7 +1400,54 @@ function Admin({
       }));
   }, [supports]);
 
-  const totalMembers = fanRows.length + creators.length + 1;
+  const mergedFans = [...localFans, ...fanRows];
+  const mergedCreators = [
+    ...localCreators,
+    ...creatorRows.map(creator => ({
+      id: creator.id,
+      displayName: creator.displayName,
+      handle: creator.handle,
+      avatarUrl: creator.avatarUrl,
+      platform: creator.platform,
+      total: creator.total,
+      status: creator.status
+    }))
+  ];
+  const totalMembers = mergedFans.length + mergedCreators.length + 1;
+
+  function registerFan() {
+    const email = fanDraft.email.trim() || `fan-${Date.now()}@example.com`;
+    setLocalFans(prev => [
+      {
+        name: fanDraft.name.trim() || '새 팬',
+        email,
+        total: 0,
+        count: 0,
+        lastSeen: new Date().toISOString(),
+        tier: fanDraft.level
+      },
+      ...prev
+    ]);
+    setFanDraft({ name: '', email: '', level: fanDraft.level });
+  }
+
+  function registerCreator() {
+    const id = `creator-${Date.now()}`;
+    setLocalCreators(prev => [
+      {
+        id,
+        displayName: creatorDraft.displayName.trim() || '새 인플러언서',
+        handle: creatorDraft.handle.trim() || '@new.creator',
+        avatarUrl: creatorDraft.avatarUrl,
+        platform: creatorDraft.platform,
+        total: 0,
+        status: '대기'
+      },
+      ...prev
+    ]);
+    setCreatorDraft(prev => ({ ...prev, displayName: '', handle: '' }));
+  }
+
   return (
     <section className="admin-lte-shell">
       <aside className="admin-sidebar">
@@ -1448,27 +1516,53 @@ function Admin({
           <article className="small-box green">
             <div>
               <span>팬 회원가입</span>
-              <strong>{fanRows.length}</strong>
+              <strong>{mergedFans.length}</strong>
             </div>
             <Users />
           </article>
           <article className="small-box yellow">
             <div>
               <span>인플러언서 가입</span>
-              <strong>{creators.length}</strong>
+              <strong>{mergedCreators.length}</strong>
             </div>
             <UserRoundPlus />
           </article>
           <article className="small-box purple">
             <div>
-              <span>정산 대기액</span>
-              <strong>{adminFeeTotal.toLocaleString()}원</strong>
+              <span>관리 수수료율</span>
+              <strong>{feeRate}%</strong>
             </div>
             <WalletCards />
           </article>
         </div>
 
         <div className="admin-grid">
+          <section className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">설정</span>
+                <h2>정산 수수료율</h2>
+              </div>
+              <span className="admin-badge light">1~100%</span>
+            </div>
+            <div className="settings-card">
+              <label>
+                현재 수수료율
+                <input type="range" min={1} max={100} value={feeRate} onChange={event => setFeeRate(Number(event.target.value))} />
+              </label>
+              <div className="settings-metrics">
+                <div>
+                  <span>관리자 수수료</span>
+                  <b>{Math.round((adminFeeTotal * feeRate) / 25).toLocaleString()}원</b>
+                </div>
+                <div>
+                  <span>인플러언서 지급액</span>
+                  <b>{Math.max(0, creatorPayoutTotal - Math.round((adminFeeTotal * (feeRate - 25)) / 25)).toLocaleString()}원</b>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="admin-panel admin-panel-wide">
             <div className="admin-panel-head">
               <div>
@@ -1515,7 +1609,29 @@ function Admin({
               </div>
               <span className="admin-badge light"><BadgeCheck size={14} /> 등급 관리</span>
             </div>
-            <FanSignupTable fans={fanRows} />
+            <div className="admin-form-grid">
+              <label>
+                팬 이름
+                <input value={fanDraft.name} onChange={event => setFanDraft({ ...fanDraft, name: event.target.value })} />
+              </label>
+              <label>
+                이메일
+                <input value={fanDraft.email} onChange={event => setFanDraft({ ...fanDraft, email: event.target.value })} placeholder="fan@example.com" />
+              </label>
+              <label>
+                등급
+                <select value={fanDraft.level} onChange={event => setFanDraft({ ...fanDraft, level: event.target.value })}>
+                  <option value="S">S</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                </select>
+              </label>
+              <button className="solid-button" type="button" onClick={registerFan}>
+                팬 등록
+              </button>
+            </div>
+            <FanSignupTable fans={mergedFans} />
           </section>
 
           <section className="admin-panel admin-panel-wide">
@@ -1526,7 +1642,33 @@ function Admin({
               </div>
               <span className="admin-badge light"><FileText size={14} /> 프로필 확인</span>
             </div>
-            <CreatorSignupTable creators={creatorRows} />
+            <div className="admin-form-grid creator-form">
+              <label>
+                이름
+                <input value={creatorDraft.displayName} onChange={event => setCreatorDraft({ ...creatorDraft, displayName: event.target.value })} />
+              </label>
+              <label>
+                아이디
+                <input value={creatorDraft.handle} onChange={event => setCreatorDraft({ ...creatorDraft, handle: event.target.value })} placeholder="@creator.id" />
+              </label>
+              <label>
+                플랫폼
+                <select value={creatorDraft.platform} onChange={event => setCreatorDraft({ ...creatorDraft, platform: event.target.value })}>
+                  <option value="Instagram">Instagram</option>
+                  <option value="YouTube">YouTube</option>
+                  <option value="Twitch">Twitch</option>
+                  <option value="TikTok">TikTok</option>
+                </select>
+              </label>
+              <label>
+                프로필 이미지
+                <input value={creatorDraft.avatarUrl} onChange={event => setCreatorDraft({ ...creatorDraft, avatarUrl: event.target.value })} />
+              </label>
+              <button className="solid-button" type="button" onClick={registerCreator}>
+                인플러언서 등록
+              </button>
+            </div>
+            <CreatorSignupTable creators={mergedCreators} />
           </section>
         </div>
       </div>
