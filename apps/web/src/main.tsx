@@ -1150,8 +1150,8 @@ function AuthPage({
   setSession: (session: Session | null) => void;
 }) {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState(mode === 'login' ? 'hspjjang@naver.com' : '');
-  const [password, setPassword] = useState(mode === 'login' ? '1111' : '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<'FAN' | 'CREATOR'>('CREATOR');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1263,7 +1263,13 @@ function AuthPage({
         )}
         <label>
           이메일
-          <input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder={isAdminLogin ? '아이디를 아무거나 입력하세요' : 'you@example.com'} required />
+          <input
+            type={isAdminLogin ? 'text' : 'email'}
+            value={email}
+            onChange={event => setEmail(event.target.value)}
+            placeholder={isAdminLogin ? '아이디를 아무거나 입력하세요' : 'you@example.com'}
+            required={!isAdminLogin}
+          />
         </label>
         <label>
           비밀번호
@@ -1272,7 +1278,7 @@ function AuthPage({
             value={password}
             onChange={event => setPassword(event.target.value)}
             placeholder={isAdminLogin ? '비밀번호도 아무거나 입력하세요' : '비밀번호 입력'}
-            required
+            required={!isAdminLogin}
           />
         </label>
         {error && <p className="form-error">{error}</p>}
