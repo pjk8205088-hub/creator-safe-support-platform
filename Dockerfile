@@ -10,16 +10,18 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY pnpm-workspace.yaml pnpm-workspace.yaml
 
-RUN npm install -g npm@10.8.2 \
-  && npm install --include=dev --workspaces --no-audit --no-fund --ignore-scripts
+RUN corepack enable \
+  && corepack prepare pnpm@9.15.9 --activate \
+  && pnpm install --no-frozen-lockfile --ignore-scripts
 
 COPY . .
 
-RUN npm run build -w packages/shared \
-  && npm run build -w apps/web \
-  && npm run prisma:generate -w apps/api \
-  && npm run build -w apps/api
+RUN pnpm --filter @cssp/shared build \
+  && pnpm --filter @cssp/web build \
+  && pnpm --filter @cssp/api prisma:generate \
+  && pnpm --filter @cssp/api build
 
 ENV NODE_ENV=production
 

@@ -5,8 +5,8 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "npm run start -w apps/api",
-    "preDeployCommand": "npm run prisma:migrate -w apps/api",
+    "startCommand": "pnpm --filter @cssp/api start",
+    "preDeployCommand": "pnpm --filter @cssp/api prisma:migrate",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
