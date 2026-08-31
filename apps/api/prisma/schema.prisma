@@ -1,11 +1,147 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "mysql" url = env("DATABASE_URL") }
-enum Role { FAN CREATOR ADMIN }
-enum DigitalOrderStatus { PENDING_PAYMENT PAID PROVISIONING ACTIVE CANCELLED REFUNDED }
-model User { id String @id @default(cuid()) email String @unique passwordHash String? role Role @default(FAN) displayName String createdAt DateTime @default(now()) updatedAt DateTime @updatedAt creatorProfile CreatorProfile? digitalOrders DigitalOrder[] pointWallet PointWallet? }
-model CreatorProfile { id String @id @default(cuid()) userId String @unique slug String @unique bio String @default("") safeAddressMemo String? user User @relation(fields:[userId], references:[id]) digitalProducts DigitalProduct[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model DigitalProduct { id String @id @default(cuid()) creatorId String title String imageUrl String? description String? pointPrice Int priority Int @default(0) isActive Boolean @default(true) creator CreatorProfile @relation(fields:[creatorId], references:[id]) orders DigitalOrder[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model PointWallet { id String @id @default(cuid()) userId String @unique balance Int @default(0) user User @relation(fields:[userId], references:[id]) charges PointCharge[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model PointCharge { id String @id @default(cuid()) walletId String points Int amount Int paymentProvider String paymentKey String? status DigitalOrderStatus @default(PENDING_PAYMENT) wallet PointWallet @relation(fields:[walletId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model DigitalOrder { id String @id @default(cuid()) creatorId String productId String? fanId String? purchaserName String message String? pointAmount Int status DigitalOrderStatus @default(PENDING_PAYMENT) paymentProvider String paymentKey String? createdAt DateTime @default(now()) updatedAt DateTime @updatedAt fan User? @relation(fields:[fanId], references:[id]) product DigitalProduct? @relation(fields:[productId], references:[id]) }
-model Report { id String @id @default(cuid()) targetType String targetId String reason String status String @default("OPEN") createdAt DateTime @default(now()) }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FAN
+  CREATOR
+  ADMIN
+}
+
+enum DigitalOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROVISIONING
+  ACTIVE
+  CANCELLED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  passwordHash   String?
+  role           Role            @default(FAN)
+  grade          String          @default("C")
+  displayName    String
+  profileImage   String?         @db.VarChar(500)
+  instagramId    String?
+  youtubeUrl     String?         @db.VarChar(500)
+  bio            String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  creatorProfile CreatorProfile?
+  digitalOrders  DigitalOrder[]  @relation("FanOrders")
+  pointWallet    PointWallet?
+}
+
+model CreatorProfile {
+  id              String           @id @default(cuid())
+  userId          String?          @unique
+  slug            String           @unique
+  displayName     String
+  handle          String
+  bio             String           @db.Text
+  category        String           @default("creator")
+  platform        String           @default("Instagram")
+  avatarUrl       String           @db.VarChar(500)
+  coverUrl        String           @db.VarChar(500)
+  instagramId     String?
+  youtubeUrl      String?          @db.VarChar(500)
+  safeAddressMemo String?
+  isActive        Boolean          @default(true)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  digitalProducts DigitalProduct[]
+  digitalOrders   DigitalOrder[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model DigitalProduct {
+  id          String         @id @default(cuid())
+  creatorId   String
+  title       String
+  imageUrl    String?        @db.VarChar(500)
+  description String?        @db.Text
+  pointPrice  Int
+  priority    Int            @default(0)
+  isActive    Boolean        @default(true)
+  creator     CreatorProfile @relation(fields: [creatorId], references: [id])
+  orders      DigitalOrder[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PointWallet {
+  id        String        @id @default(cuid())
+  userId    String        @unique
+  balance   Int           @default(0)
+  user      User          @relation(fields: [userId], references: [id])
+  charges   PointCharge[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model PointCharge {
+  id              String             @id @default(cuid())
+  walletId        String
+  points          Int
+  amount          Int
+  paymentProvider String
+  paymentKey      String?
+  status          DigitalOrderStatus @default(PENDING_PAYMENT)
+  wallet          PointWallet        @relation(fields: [walletId], references: [id])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model DigitalOrder {
+  id              String             @id @default(cuid())
+  orderNo         String             @unique
+  creatorId       String
+  productId       String?
+  fanId           String?
+  purchaserName   String
+  purchaserEmail  String?
+  message         String?            @db.Text
+  pointAmount     Int
+  paymentProvider String
+  paymentKey      String?
+  status          DigitalOrderStatus @default(PENDING_PAYMENT)
+  commissionRate  Float              @default(25)
+  adminFee        Int                @default(0)
+  creatorPayout   Int                @default(0)
+  payoutStatus    PayoutStatus       @default(PENDING)
+  paidAt          DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  creator         CreatorProfile     @relation(fields: [creatorId], references: [id])
+  fan             User?              @relation("FanOrders", fields: [fanId], references: [id], onDelete: SetNull)
+  product         DigitalProduct?    @relation(fields: [productId], references: [id])
+}
+
+model AdminSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  targetType String
+  targetId   String
+  reason     String
+  status     String   @default("OPEN")
+  createdAt  DateTime @default(now())
+}

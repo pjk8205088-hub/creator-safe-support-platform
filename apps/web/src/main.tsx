@@ -130,7 +130,9 @@ type PaymentOrderResponse = {
   paymentKey: string;
 };
 
-const API = import.meta.env.VITE_API_URL || (location.hostname === 'localhost' ? 'http://localhost:4000' : '');
+const API =
+  (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL : '') ||
+  (typeof location !== 'undefined' && location.hostname === 'localhost' ? 'http://localhost:4000' : '');
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 const walletKey = 'cssp-demo-point-wallet';

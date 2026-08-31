@@ -1,9 +1,13 @@
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
 
 type UserRole = 'FAN' | 'CREATOR';
@@ -73,6 +77,7 @@ const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
 app.use(express.json());
+const prisma = process.env.DATABASE_URL ? new PrismaClient() : null;
 
 const categories: Category[] = [
   {
@@ -213,6 +218,97 @@ const supports: any[] = [];
 const notifications: any[] = [];
 const paymentOrders: PaymentOrder[] = [];
 const adminCommissionRate = Number(process.env.ADMIN_COMMISSION_RATE ?? 25);
+const dbReady = () => prisma !== null;
+
+async function seedDatabase() {
+  if (!prisma) return;
+  const count = await prisma.creatorProfile.count();
+  if (count > 0) return;
+  for (const creator of creators) {
+    await prisma.creatorProfile.create({
+      data: {
+        slug: creator.slug,
+        displayName: creator.displayName,
+        handle: creator.handle,
+        bio: creator.bio,
+        category: creator.categoryId,
+        platform: creator.platform,
+        avatarUrl: creator.avatarUrl,
+        coverUrl: creator.coverUrl,
+        instagramId: creator.slug,
+        digitalProducts: {
+          create: creator.wishlist.map(item => ({
+            title: item.title,
+            imageUrl: item.imageUrl,
+            description: item.note,
+            pointPrice: item.price
+          }))
+        }
+      }
+    });
+  }
+  await prisma.adminSetting.upsert({
+    where: { key: 'commissionRate' },
+    update: {},
+    create: { key: 'commissionRate', value: String(adminCommissionRate) }
+  });
+}
+
+async function getCommissionRate() {
+  if (!prisma) return adminCommissionRate;
+  await seedDatabase();
+  const setting = await prisma.adminSetting.findUnique({ where: { key: 'commissionRate' } });
+  const rate = Number(setting?.value ?? adminCommissionRate);
+  return Math.max(1, Math.min(100, Number.isFinite(rate) ? rate : adminCommissionRate));
+}
+
+function dbCreatorSummary(creator: any) {
+  return {
+    id: creator.id,
+    slug: creator.slug,
+    displayName: creator.displayName,
+    handle: creator.handle,
+    bio: creator.bio,
+    categoryId: creator.category,
+    platform: creator.platform,
+    avatarUrl: creator.avatarUrl,
+    coverUrl: creator.coverUrl,
+    addressMasked: creator.safeAddressMemo ? maskAddress(creator.safeAddressMemo) : undefined,
+    wishlist: (creator.digitalProducts ?? []).map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      price: item.pointPrice,
+      categoryId: creator.category,
+      imageUrl: item.imageUrl ?? creator.avatarUrl,
+      note: item.description ?? ''
+    })),
+    category: categories.find(category => category.id === creator.category)
+  };
+}
+
+function dbOrderToSupport(order: any): Support & { creatorName?: string; creatorHandle?: string } {
+  return {
+    id: order.orderNo,
+    creatorId: order.creatorId,
+    creatorName: order.creator?.displayName,
+    creatorHandle: order.creator?.handle,
+    creatorInstagramId: order.creator?.instagramId ? `@${order.creator.instagramId}` : order.creator?.handle,
+    wishlistItemId: order.productId ?? undefined,
+    supporterName: order.purchaserName,
+    supporterId: order.fanId ?? undefined,
+    supporterEmail: order.purchaserEmail ?? undefined,
+    message: order.message ?? undefined,
+    amount: order.pointAmount,
+    paymentProvider: order.paymentProvider,
+    paymentKey: order.paymentKey ?? undefined,
+    status: order.status,
+    adminFee: order.adminFee,
+    creatorPayout: order.creatorPayout,
+    payoutDestination: 'ADMIN_DASHBOARD',
+    payoutStatus: order.payoutStatus,
+    createdAt: order.createdAt.toISOString()
+  };
+}
 
 const AuthSchema = z.object({
   email: z.string().email(),
@@ -263,24 +359,86 @@ app.get('/api/categories', (_req, res) => {
   );
 });
 
-app.get('/api/creators', (req, res) => {
+app.get('/api/creators', async (req, res) => {
+  if (dbReady()) {
+    await seedDatabase();
+    const query = String(req.query.q ?? '').trim();
+    const dbCreators = await prisma!.creatorProfile.findMany({
+      where: {
+        isActive: true,
+        ...(query
+          ? {
+              OR: [
+                { displayName: { contains: query } },
+                { handle: { contains: query } },
+                { bio: { contains: query } },
+                { instagramId: { contains: query } }
+              ]
+            }
+          : {})
+      },
+      include: { digitalProducts: { where: { isActive: true }, orderBy: { priority: 'desc' } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(dbCreators.map(dbCreatorSummary));
+  }
   const category = String(req.query.category ?? '');
   const filtered = category ? creators.filter(creator => creator.categoryId === category) : creators;
   res.json(filtered.map(creatorSummary));
 });
 
-app.get('/api/creators/:slug', (req, res) => {
+app.get('/api/creators/:slug', async (req, res) => {
+  if (dbReady()) {
+    await seedDatabase();
+    const creator = await prisma!.creatorProfile.findFirst({
+      where: { OR: [{ slug: req.params.slug }, { id: req.params.slug }] },
+      include: { digitalProducts: { where: { isActive: true }, orderBy: { priority: 'desc' } } }
+    });
+    if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+    return res.json(dbCreatorSummary(creator));
+  }
   const creator = creators.find(item => item.slug === req.params.slug || item.id === req.params.slug);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
   res.json({ ...creatorSummary(creator), addressMasked: maskAddress(creator.safeAddress) });
 });
 
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const parsed = SignupSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
 
   const input = parsed.data;
   const email = input.email.toLowerCase();
+  if (dbReady()) {
+    await seedDatabase();
+    const exists = await prisma!.user.findUnique({ where: { email } });
+    if (exists) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
+    const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const user = await prisma!.user.create({
+      data: {
+        email,
+        displayName: input.name,
+        passwordHash: input.password,
+        role: input.role,
+        ...(input.role === 'CREATOR'
+          ? {
+              creatorProfile: {
+                create: {
+                  slug: requestedSlug || `creator-${nanoid(5)}`,
+                  displayName: input.name,
+                  handle: `@${requestedSlug || input.name}`,
+                  bio: '인플러언서 코리아 크리에이터입니다.',
+                  category: 'creator',
+                  platform: 'Instagram',
+                  avatarUrl: '/influencers/trendy-influencers-wall.png',
+                  coverUrl: '/influencers/trendy-influencers-wall.png'
+                }
+              }
+            }
+          : {})
+      }
+    });
+    return res.status(201).json({ token: `db_${user.id}`, user: publicUser({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() }) });
+  }
   if (users.some(user => user.email === email)) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
 
   const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -354,10 +512,43 @@ app.post('/api/supports', (req, res) => {
   res.status(201).json(support);
 });
 
-app.post('/api/payments/orders', (req, res) => {
+app.post('/api/payments/orders', async (req, res) => {
   const parsed = CreateSupportSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
   const input = parsed.data;
+  if (dbReady()) {
+    await seedDatabase();
+    const creator = await prisma!.creatorProfile.findFirst({ where: { OR: [{ id: input.creatorId }, { slug: input.creatorId }] } });
+    if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+    const rate = await getCommissionRate();
+    const adminFee = Math.round((input.amount * rate) / 100);
+    const creatorPayout = input.amount - adminFee;
+    const order = await prisma!.digitalOrder.create({
+      data: {
+        orderNo: `ord_${nanoid(10)}`,
+        creatorId: creator.id,
+        productId: undefined,
+        purchaserName: input.supporterName,
+        purchaserEmail: 'guest@eon8.co.kr',
+        message: input.message,
+        pointAmount: input.amount,
+        paymentProvider: input.paymentProvider,
+        paymentKey: `pending_${nanoid(12)}`,
+        commissionRate: rate,
+        adminFee,
+        creatorPayout
+      }
+    });
+    return res.status(201).json({
+      orderId: order.orderNo,
+      paymentProvider: order.paymentProvider,
+      amount: order.pointAmount,
+      adminFee: order.adminFee,
+      creatorPayout: order.creatorPayout,
+      payoutDestination: 'ADMIN_DASHBOARD',
+      paymentKey: order.paymentKey
+    });
+  }
   const creator = creators.find(item => item.id === input.creatorId);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
   const adminFee = Math.round((input.amount * adminCommissionRate) / 100);
@@ -395,13 +586,29 @@ app.post('/api/payments/orders', (req, res) => {
   });
 });
 
-app.post('/api/payments/confirm', (req, res) => {
+app.post('/api/payments/confirm', async (req, res) => {
   const schema = z.object({
     orderId: z.string().min(1),
     paymentKey: z.string().min(1)
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
+  if (dbReady()) {
+    const order = await prisma!.digitalOrder.update({
+      where: { orderNo: parsed.data.orderId },
+      data: { status: 'PAID', paymentKey: parsed.data.paymentKey, paidAt: new Date() },
+      include: { creator: true }
+    }).catch(() => null);
+    if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+    const support = dbOrderToSupport(order);
+    return res.json({
+      ...support,
+      supportId: support.id,
+      support,
+      payoutDestination: 'ADMIN_DASHBOARD',
+      payoutStatus: order.payoutStatus
+    });
+  }
   const order = paymentOrders.find(item => item.id === parsed.data.orderId);
   if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
   if (order.paymentKey !== parsed.data.paymentKey) return res.status(400).json({ code: 'PAYMENT_KEY_MISMATCH' });
@@ -447,9 +654,35 @@ app.post('/api/payments/confirm', (req, res) => {
   });
 });
 
-app.get('/api/supports', (_req, res) => res.json(supports));
+app.get('/api/supports', async (_req, res) => {
+  if (dbReady()) {
+    await seedDatabase();
+    const orders = await prisma!.digitalOrder.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 300 });
+    return res.json(orders.map(dbOrderToSupport));
+  }
+  res.json(supports);
+});
 app.get('/api/payments/orders', (_req, res) => res.json(paymentOrders));
-app.get('/api/admin/summary', (_req, res) =>
+app.get('/api/admin/summary', async (_req, res) => {
+  if (dbReady()) {
+    await seedDatabase();
+    const [creatorCount, userCount, orders] = await Promise.all([
+      prisma!.creatorProfile.count({ where: { isActive: true } }),
+      prisma!.user.count(),
+      prisma!.digitalOrder.findMany({ where: { status: 'PAID' } })
+    ]);
+    return res.json({
+      creators: creatorCount,
+      users: userCount,
+      supports: orders.length,
+      revenue: orders.reduce((sum: number, item: any) => sum + item.pointAmount, 0),
+      adminFeeTotal: orders.reduce((sum: number, item: any) => sum + item.adminFee, 0),
+      creatorPayoutTotal: orders.reduce((sum: number, item: any) => sum + item.creatorPayout, 0),
+      openReports: 0,
+      pendingSettlements: orders.filter((item: any) => item.payoutStatus === 'PENDING').length,
+      commissionRate: await getCommissionRate()
+    });
+  }
   res.json({
     creators: creators.length,
     users: users.length,
@@ -459,12 +692,51 @@ app.get('/api/admin/summary', (_req, res) =>
     creatorPayoutTotal: supports.reduce((sum, item) => sum + (item.creatorPayout ?? 0), 0),
     openReports: 0,
     pendingSettlements: supports.filter(item => item.status === 'PAID').length
-  })
-);
+  });
+});
+app.get('/api/admin/users', async (_req, res) => {
+  if (!dbReady()) return res.json(users.map(publicUser));
+  await seedDatabase();
+  const rows = await prisma!.user.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  res.json(rows.map((user: any) => ({ id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, createdAt: user.createdAt })));
+});
+app.get('/api/admin/creators', async (_req, res) => {
+  if (!dbReady()) return res.json(creators);
+  await seedDatabase();
+  const rows = await prisma!.creatorProfile.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  res.json(rows);
+});
+app.get('/api/admin/payments', async (_req, res) => {
+  if (!dbReady()) return res.json(paymentOrders);
+  const rows = await prisma!.digitalOrder.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 300 });
+  res.json(rows.map(dbOrderToSupport));
+});
+app.get('/api/admin/settings', async (_req, res) => res.json({ commissionRate: await getCommissionRate() }));
+app.post('/api/admin/settings', async (req, res) => {
+  const commissionRate = Math.max(1, Math.min(100, Number(req.body?.commissionRate ?? adminCommissionRate)));
+  if (dbReady()) {
+    await prisma!.adminSetting.upsert({
+      where: { key: 'commissionRate' },
+      update: { value: String(commissionRate) },
+      create: { key: 'commissionRate', value: String(commissionRate) }
+    });
+  }
+  res.json({ commissionRate });
+});
 app.get('/api/notifications', (_req, res) => res.json(notifications));
 app.post('/api/reports', (req, res) =>
   res.status(201).json({ id: `rp_${nanoid(8)}`, status: 'OPEN', ...req.body, createdAt: new Date().toISOString() })
 );
+
+const apiDir = path.dirname(fileURLToPath(import.meta.url));
+const defaultWebOut = path.resolve(apiDir, '../../web/out');
+const webOutDir = path.resolve(process.env.WEB_OUT_DIR ?? defaultWebOut);
+if (fs.existsSync(path.join(webOutDir, 'index.html'))) {
+  app.use(express.static(webOutDir));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(webOutDir, 'index.html'));
+  });
+}
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => console.log(`API ready on http://localhost:${port}`));

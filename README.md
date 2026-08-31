@@ -18,9 +18,9 @@
 
 ## 현재 구조
 
-- `apps/web`: Next.js + React 프론트엔드입니다. 마이그레이션 안정화를 위해 기존 Vite 빌드는 `build:vite`로 남겨두었습니다.
-- `apps/api`: 로컬/참고용 Node API입니다. Prisma datasource는 Webtizen 환경에 맞춰 MySQL로 변경했습니다.
-- `apps/webtizen`: Webtizen 공유호스팅에서 실행할 PHP + MySQL API입니다. 관리자 요약, 팬/회원 목록, 인플루언서 목록/수정, 결제내역, 수수료율 설정, 팬/인플루언서 가입, 결제 주문/승인 API를 포함합니다.
+- `apps/web`: Next.js + React 프론트엔드입니다. Railway 배포 시 `apps/web/out`으로 정적 export됩니다.
+- `apps/api`: Railway에서 실행되는 Express + Prisma API입니다. MySQL `DATABASE_URL`이 있으면 관리자/회원/결제 데이터가 DB에 저장되고, API 서버가 Next 정적 프론트도 함께 서빙합니다.
+- `apps/webtizen`: 이전 Webtizen 참고용 PHP + MySQL API입니다. 현재 운영 배포 대상은 Railway입니다.
 - `docs/webtizen-mysql-admin-schema.sql`: Webtizen phpMyAdmin에 import할 MySQL 테이블입니다.
 
 ## 빠른 실행
@@ -45,9 +45,18 @@ cp apps/api/.env.example apps/api/.env
 ## 배포
 
 - 공개 홈페이지: https://pjk8205088-hub.github.io/creator-safe-support-platform/
-- 소개/랜딩: GitHub Pages 또는 Vercel
-- API: Render, Railway, Fly.io, AWS ECS 등
+- 운영 홈페이지/API: Railway
 - DB: MySQL
+
+## Railway 배포
+
+Railway 한 프로젝트 안에서 앱 서비스 1개와 MySQL 서비스 1개를 사용합니다. 앱 서비스는 빌드 시 Next.js 프론트를 export하고 Express API를 컴파일한 뒤, 실행 시 API와 홈페이지를 같은 도메인에서 제공합니다.
+
+필수 환경변수:
+
+- `DATABASE_URL`: Railway MySQL의 `${{MySQL.MYSQL_URL}}`
+- `WEB_ORIGIN`: `https://www.eon8.co.kr,https://eon8.co.kr,https://<railway-domain>`
+- `ADMIN_COMMISSION_RATE`: 기본 수수료율. 예: `25`
 
 ## Webtizen 배포
 
