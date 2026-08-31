@@ -1,0 +1,11 @@
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+.git
+.npm-cache
+dist
+apps/web/next-dist
+apps/web/out
+apps/api/dist
+packages/shared/dist
+*.log
