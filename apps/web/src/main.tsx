@@ -485,7 +485,16 @@ export function App() {
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
       {page === 'admin-login' && <AuthPage mode="login" session={session} setSession={setSession} />}
-      {page === 'admin' && <Admin supports={supports} creators={creators} categories={categories} adminFeeTotal={adminFeeTotal} creatorPayoutTotal={creatorPayoutTotal} />}
+      {page.startsWith('admin') && page !== 'admin-login' && (
+        <Admin
+          page={page}
+          supports={supports}
+          creators={creators}
+          categories={categories}
+          adminFeeTotal={adminFeeTotal}
+          creatorPayoutTotal={creatorPayoutTotal}
+        />
+      )}
       {page === 'business' && <BusinessPage />}
       {page === 'policies' && <PolicyPage />}
       <Footer />
@@ -1157,6 +1166,13 @@ function AuthPage({
   const [busy, setBusy] = useState(false);
   const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
 
+  useEffect(() => {
+    if (!isAdminLogin) return;
+    const adminSession = createDemoSession('관리자', email.trim() || 'admin@influencer-korea.local', 'CREATOR');
+    setSession(adminSession);
+    location.hash = 'admin';
+  }, [email, isAdminLogin, setSession]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -1322,12 +1338,14 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
 }
 
 function Admin({
+  page,
   supports,
   creators,
   categories,
   adminFeeTotal,
   creatorPayoutTotal
 }: {
+  page: string;
   supports: Support[];
   creators: Creator[];
   categories: Category[];
@@ -1336,6 +1354,7 @@ function Admin({
 }) {
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
+  const section = page === 'admin' ? 'dashboard' : page.replace('admin-', '');
   const [fanDraft, setFanDraft] = useState({ name: '새 팬', email: '', level: 'B' });
   const [creatorDraft, setCreatorDraft] = useState({
     displayName: '새 인플러언서',
@@ -1420,6 +1439,39 @@ function Admin({
     }))
   ];
   const totalMembers = mergedFans.length + mergedCreators.length + 1;
+  const dmRows = [
+    {
+      id: 'dm-20260831-001',
+      fan: '김민지',
+      creator: '강수아',
+      channel: 'Instagram DM',
+      message: '프리미엄 DM 이용권 결제 후 이미지와 메시지 전송',
+      status: '전송대기',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'kakao-20260831-002',
+      fan: '박준호',
+      creator: '김도진',
+      channel: 'Kakao Alimtalk',
+      message: '10,000P 이상 결제 조건 충족 알림 로그',
+      status: '발송완료',
+      createdAt: new Date().toISOString()
+    }
+  ].filter(row => {
+    if (!normalizedQuery) return true;
+    return `${row.id} ${row.fan} ${row.creator} ${row.channel} ${row.message} ${row.status}`.toLowerCase().includes(normalizedQuery);
+  });
+
+  const settlementRows = mergedCreators.map(creator => {
+    const adminFee = Math.round((creator.total * feeRate) / 100);
+    return {
+      ...creator,
+      adminFee,
+      payout: Math.max(0, creator.total - adminFee)
+    };
+  });
+  const showDashboard = section === 'dashboard';
 
   function registerFan() {
     const email = fanDraft.email.trim() || `fan-${Date.now()}@example.com`;
@@ -1465,27 +1517,31 @@ function Admin({
           </div>
         </div>
         <nav>
-          <a href="#admin" className="active">
+          <a href="#admin" className={section === 'dashboard' ? 'active' : ''}>
             <PanelLeft size={16} />
             대시보드
           </a>
-          <a href="#admin-payments">
+          <a href="#admin-payments" className={section === 'payments' ? 'active' : ''}>
             <ReceiptText size={16} />
             결제 관리
           </a>
-          <a href="#admin-fans">
+          <a href="#admin-fans" className={section === 'fans' ? 'active' : ''}>
             <Users size={16} />
             팬 회원가입
           </a>
-          <a href="#admin-creators">
+          <a href="#admin-creators" className={section === 'creators' ? 'active' : ''}>
             <UserRoundPlus size={16} />
             인플러언서 가입
           </a>
-          <a href="#admin-settlement">
+          <a href="#admin-settlement" className={section === 'settlement' ? 'active' : ''}>
             <CircleDollarSign size={16} />
             정산 현황
           </a>
-          <a href="#admin-settings">
+          <a href="#admin-dm" className={section === 'dm' ? 'active' : ''}>
+            <Bell size={16} />
+            DM/카톡 로그
+          </a>
+          <a href="#admin-settings" className={section === 'settings' ? 'active' : ''}>
             <BriefcaseBusiness size={16} />
             설정
           </a>
@@ -1543,6 +1599,7 @@ function Admin({
         </div>
 
         <div className="admin-grid">
+          {(showDashboard || section === 'settings' || section === 'settlement') && (
           <section className="admin-panel">
             <div className="admin-panel-head">
               <div>
@@ -1568,7 +1625,9 @@ function Admin({
               </div>
             </div>
           </section>
+          )}
 
+          {(showDashboard || section === 'payments') && (
           <section className="admin-panel admin-panel-wide">
             <div className="admin-panel-head">
               <div>
@@ -1579,7 +1638,9 @@ function Admin({
             </div>
             <PaymentTable supports={paymentRows} />
           </section>
+          )}
 
+          {showDashboard && (
           <section className="admin-panel">
             <div className="admin-panel-head">
               <div>
@@ -1606,7 +1667,9 @@ function Admin({
               </div>
             </div>
           </section>
+          )}
 
+          {(showDashboard || section === 'fans') && (
           <section className="admin-panel admin-panel-wide">
             <div className="admin-panel-head">
               <div>
@@ -1639,7 +1702,9 @@ function Admin({
             </div>
             <FanSignupTable fans={mergedFans} />
           </section>
+          )}
 
+          {(showDashboard || section === 'creators') && (
           <section className="admin-panel admin-panel-wide">
             <div className="admin-panel-head">
               <div>
@@ -1676,6 +1741,33 @@ function Admin({
             </div>
             <CreatorSignupTable creators={mergedCreators} />
           </section>
+          )}
+
+          {(showDashboard || section === 'settlement') && (
+            <section className="admin-panel admin-panel-wide">
+              <div className="admin-panel-head">
+                <div>
+                  <span className="kicker">정산 현황</span>
+                  <h2>인플러언서별 지급 계산</h2>
+                </div>
+                <span className="admin-badge">수수료 {feeRate}% 적용</span>
+              </div>
+              <SettlementTable rows={settlementRows} />
+            </section>
+          )}
+
+          {(showDashboard || section === 'dm') && (
+            <section className="admin-panel admin-panel-wide">
+              <div className="admin-panel-head">
+                <div>
+                  <span className="kicker">DM / Kakao Log</span>
+                  <h2>DM 보낸 내용 및 카톡 알림 로그</h2>
+                </div>
+                <span className="admin-badge light">로그 저장</span>
+              </div>
+              <DmLogTable rows={dmRows} />
+            </section>
+          )}
         </div>
       </div>
     </section>
@@ -1737,7 +1829,7 @@ function FanSignupTable({ fans }: { fans: { name: string; email: string; total: 
           <tr>
             <th>팬 이름</th>
             <th>이메일</th>
-            <th>후원 합계</th>
+            <th>결제 합계</th>
             <th>횟수</th>
             <th>등급</th>
             <th>최근 활동</th>
@@ -1752,6 +1844,91 @@ function FanSignupTable({ fans }: { fans: { name: string; email: string; total: 
               <td>{fan.count}회</td>
               <td><span className="tier-chip">{fan.tier}</span></td>
               <td>{new Date(fan.lastSeen).toLocaleString('ko-KR')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SettlementTable({
+  rows
+}: {
+  rows: { id: string; displayName: string; handle: string; avatarUrl: string; platform: string; total: number; adminFee: number; payout: number; status: string }[];
+}) {
+  if (!rows.length) {
+    return <div className="empty-state">아직 정산 대상 인플러언서가 없습니다.</div>;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>프로필</th>
+            <th>인플러언서</th>
+            <th>플랫폼</th>
+            <th>총 결제액</th>
+            <th>관리자 수수료</th>
+            <th>수령 예정액</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.id}>
+              <td>
+                <img className="table-avatar" src={row.avatarUrl} alt="" />
+              </td>
+              <td>
+                <b>{row.displayName}</b>
+                <small>{row.handle}</small>
+              </td>
+              <td>{row.platform}</td>
+              <td>{row.total.toLocaleString()}원</td>
+              <td>{row.adminFee.toLocaleString()}원</td>
+              <td>{row.payout.toLocaleString()}원</td>
+              <td>{row.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DmLogTable({
+  rows
+}: {
+  rows: { id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }[];
+}) {
+  if (!rows.length) {
+    return <div className="empty-state">검색된 DM/카톡 로그가 없습니다.</div>;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>로그번호</th>
+            <th>팬</th>
+            <th>인플러언서</th>
+            <th>채널</th>
+            <th>내용</th>
+            <th>상태</th>
+            <th>저장일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td>{row.fan}</td>
+              <td>{row.creator}</td>
+              <td>{row.channel}</td>
+              <td>{row.message}</td>
+              <td>{row.status}</td>
+              <td>{new Date(row.createdAt).toLocaleString('ko-KR')}</td>
             </tr>
           ))}
         </tbody>

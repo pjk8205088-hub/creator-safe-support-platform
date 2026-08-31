@@ -11,31 +11,56 @@ export declare const MoneySchema: z.ZodObject<{
     amount: number;
     currency: "KRW";
 }>;
-export declare const GiftStatus: z.ZodEnum<["PENDING_PAYMENT", "PAID", "ORDERED", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"]>;
-export type GiftStatus = z.infer<typeof GiftStatus>;
-export declare const CreateSupportSchema: z.ZodObject<{
+export declare const DigitalOrderStatus: z.ZodEnum<["PENDING_PAYMENT", "PAID", "PROVISIONING", "ACTIVE", "CANCELLED", "REFUNDED"]>;
+export type DigitalOrderStatus = z.infer<typeof DigitalOrderStatus>;
+export declare const CreateDigitalOrderSchema: z.ZodObject<{
     creatorId: z.ZodString;
     wishlistItemId: z.ZodOptional<z.ZodString>;
     supporterName: z.ZodString;
     message: z.ZodOptional<z.ZodString>;
     amount: z.ZodNumber;
-    paymentProvider: z.ZodEnum<["TOSS", "KAKAO_PAY", "PORTONE", "MOCK"]>;
+    paymentProvider: z.ZodEnum<["NICEPAY", "TOSS", "KAKAO_PAY", "PORTONE", "MOCK"]>;
 }, "strip", z.ZodTypeAny, {
     amount: number;
     creatorId: string;
     supporterName: string;
-    paymentProvider: "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
+    paymentProvider: "NICEPAY" | "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
     message?: string | undefined;
     wishlistItemId?: string | undefined;
 }, {
     amount: number;
     creatorId: string;
     supporterName: string;
-    paymentProvider: "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
+    paymentProvider: "NICEPAY" | "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
     message?: string | undefined;
     wishlistItemId?: string | undefined;
 }>;
-export type CreateSupportInput = z.infer<typeof CreateSupportSchema>;
+export type CreateDigitalOrderInput = z.infer<typeof CreateDigitalOrderSchema>;
+export declare const GiftStatus: z.ZodEnum<["PENDING_PAYMENT", "PAID", "PROVISIONING", "ACTIVE", "CANCELLED", "REFUNDED"]>;
+export type GiftStatus = DigitalOrderStatus;
+export declare const CreateSupportSchema: z.ZodObject<{
+    creatorId: z.ZodString;
+    wishlistItemId: z.ZodOptional<z.ZodString>;
+    supporterName: z.ZodString;
+    message: z.ZodOptional<z.ZodString>;
+    amount: z.ZodNumber;
+    paymentProvider: z.ZodEnum<["NICEPAY", "TOSS", "KAKAO_PAY", "PORTONE", "MOCK"]>;
+}, "strip", z.ZodTypeAny, {
+    amount: number;
+    creatorId: string;
+    supporterName: string;
+    paymentProvider: "NICEPAY" | "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
+    message?: string | undefined;
+    wishlistItemId?: string | undefined;
+}, {
+    amount: number;
+    creatorId: string;
+    supporterName: string;
+    paymentProvider: "NICEPAY" | "TOSS" | "KAKAO_PAY" | "PORTONE" | "MOCK";
+    message?: string | undefined;
+    wishlistItemId?: string | undefined;
+}>;
+export type CreateSupportInput = CreateDigitalOrderInput;
 export declare const CreatorProfileSchema: z.ZodObject<{
     displayName: z.ZodString;
     slug: z.ZodString;
