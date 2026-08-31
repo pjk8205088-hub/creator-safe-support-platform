@@ -1,5 +1,4 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   BadgeCheck,
   BarChart3,
@@ -26,7 +25,6 @@ import {
   UserPlus,
   WalletCards
 } from 'lucide-react';
-import './style.css';
 
 type Category = {
   id: string;
@@ -325,7 +323,7 @@ function createDemoSession(name: string, email: string, role: 'FAN' | 'CREATOR' 
   };
 }
 
-function App() {
+export function App() {
   const [page, setPage] = useState(location.hash.replace('#', '') || 'home');
   const [categories, setCategories] = useState<Category[]>(demoCategories);
   const [creators, setCreators] = useState<Creator[]>(demoCreators);
@@ -1991,4 +1989,3 @@ function Footer() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);

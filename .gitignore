@@ -2,6 +2,7 @@ node_modules/
 apps/*/node_modules/
 packages/*/node_modules/
 .vite/
+.npm-cache/
 dist/.vite/
 *.log
 .env

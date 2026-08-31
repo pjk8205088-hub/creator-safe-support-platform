@@ -16,6 +16,13 @@
 - Docker 기반 API/DB 실행 구조
 - GitHub Actions CI 및 Pages 소개 사이트 배포 구조
 
+## 현재 구조
+
+- `apps/web`: Next.js + React 프론트엔드입니다. 마이그레이션 안정화를 위해 기존 Vite 빌드는 `build:vite`로 남겨두었습니다.
+- `apps/api`: 로컬/참고용 Node API입니다. Prisma datasource는 Webtizen 환경에 맞춰 MySQL로 변경했습니다.
+- `apps/webtizen`: Webtizen 공유호스팅에서 실행할 PHP + MySQL API입니다. 관리자 요약, 팬/회원 목록, 인플루언서 목록/수정, 결제내역, 수수료율 설정, 팬/인플루언서 가입, 결제 주문/승인 API를 포함합니다.
+- `docs/webtizen-mysql-admin-schema.sql`: Webtizen phpMyAdmin에 import할 MySQL 테이블입니다.
+
 ## 빠른 실행
 
 ```bash
@@ -23,7 +30,8 @@ npm install
 npm run dev
 ```
 
-- Web: http://localhost:5173
+- Web: http://localhost:3000
+- Vite preview: http://localhost:5173
 - API: http://localhost:4000/health
 
 ## API 환경변수
@@ -39,7 +47,15 @@ cp apps/api/.env.example apps/api/.env
 - 공개 홈페이지: https://pjk8205088-hub.github.io/creator-safe-support-platform/
 - 소개/랜딩: GitHub Pages 또는 Vercel
 - API: Render, Railway, Fly.io, AWS ECS 등
-- DB: PostgreSQL
+- DB: MySQL
+
+## Webtizen 배포
+
+Webtizen에는 Next.js 서버를 상시 실행하기 어렵기 때문에 프론트는 정적 파일로 export하고, 데이터 기능은 `apps/webtizen/public/api`의 PHP API가 MySQL에 저장합니다.
+
+1. `apps/web`의 export 결과와 `apps/webtizen/public/api`, `apps/webtizen/public/config`를 홈페이지 루트에 업로드합니다.
+2. `apps/webtizen/public/config/ik-mysql.example.php`를 `ik-mysql.php`로 복사한 뒤 Webtizen MySQL 정보를 입력합니다.
+3. `apps/webtizen/database/webtizen-mysql-admin-schema.sql`을 phpMyAdmin에서 실행합니다.
 
 ## 현재 상태
 

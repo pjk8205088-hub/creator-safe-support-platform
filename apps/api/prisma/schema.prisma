@@ -1,5 +1,5 @@
 generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+datasource db { provider = "mysql" url = env("DATABASE_URL") }
 enum Role { FAN CREATOR ADMIN }
 enum DigitalOrderStatus { PENDING_PAYMENT PAID PROVISIONING ACTIVE CANCELLED REFUNDED }
 model User { id String @id @default(cuid()) email String @unique passwordHash String? role Role @default(FAN) displayName String createdAt DateTime @default(now()) updatedAt DateTime @updatedAt creatorProfile CreatorProfile? digitalOrders DigitalOrder[] pointWallet PointWallet? }
