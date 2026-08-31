@@ -14,14 +14,12 @@
 - 멤버십 등급 및 콘텐츠 이용 리포트 구조
 - 관리자 포인트 충전/디지털 상품 제공/PG 관리 대시보드
 - Docker 기반 API/DB 실행 구조
-- GitHub Actions CI 및 Pages 소개 사이트 배포 구조
+- Railway 단일 배포 구조
 
 ## 현재 구조
 
 - `apps/web`: Next.js + React 프론트엔드입니다. Railway 배포 시 `apps/web/out`으로 정적 export됩니다.
 - `apps/api`: Railway에서 실행되는 Express + Prisma API입니다. MySQL `DATABASE_URL`이 있으면 관리자/회원/결제 데이터가 DB에 저장되고, API 서버가 Next 정적 프론트도 함께 서빙합니다.
-- `apps/webtizen`: 이전 Webtizen 참고용 PHP + MySQL API입니다. 현재 운영 배포 대상은 Railway입니다.
-- `docs/webtizen-mysql-admin-schema.sql`: Webtizen phpMyAdmin에 import할 MySQL 테이블입니다.
 
 ## 빠른 실행
 
@@ -44,8 +42,8 @@ cp apps/api/.env.example apps/api/.env
 
 ## 배포
 
-- 공개 홈페이지: https://pjk8205088-hub.github.io/creator-safe-support-platform/
 - 운영 홈페이지/API: Railway
+- 운영 도메인: `eon8.co.kr`, `www.eon8.co.kr`
 - DB: MySQL
 
 ## Railway 배포
@@ -58,17 +56,13 @@ Railway 한 프로젝트 안에서 앱 서비스 1개와 MySQL 서비스 1개를
 - `WEB_ORIGIN`: `https://www.eon8.co.kr,https://eon8.co.kr,https://<railway-domain>`
 - `ADMIN_COMMISSION_RATE`: 기본 수수료율. 예: `25`
 
-## Webtizen 배포
+## 도메인 연결
 
-Webtizen에는 Next.js 서버를 상시 실행하기 어렵기 때문에 프론트는 정적 파일로 export하고, 데이터 기능은 `apps/webtizen/public/api`의 PHP API가 MySQL에 저장합니다.
-
-1. `apps/web`의 export 결과와 `apps/webtizen/public/api`, `apps/webtizen/public/config`를 홈페이지 루트에 업로드합니다.
-2. `apps/webtizen/public/config/ik-mysql.example.php`를 `ik-mysql.php`로 복사한 뒤 Webtizen MySQL 정보를 입력합니다.
-3. `apps/webtizen/database/webtizen-mysql-admin-schema.sql`을 phpMyAdmin에서 실행합니다.
+Railway 배포가 성공하면 Railway 앱 서비스에 `eon8.co.kr`과 `www.eon8.co.kr`을 custom domain으로 추가하고, 도메인 DNS에서 Railway가 안내하는 `CNAME`/`TXT` 레코드를 설정합니다.
 
 ## 현재 상태
 
-MVP 개발이 가능한 실행형 골격입니다. GitHub Pages는 `gh-pages` 브랜치의 정적 빌드를 배포하도록 설정되어 있습니다. 실제 NICEPAY/카카오 알림톡 API 키를 넣으면 결제 승인, 알림톡 발송, 상품 제공 자동화 구현으로 확장할 수 있습니다.
+MVP 개발이 가능한 실행형 골격입니다. 운영 배포는 Railway 기준이며, 실제 NICEPAY/카카오 알림톡 API 키를 넣으면 결제 승인, 알림톡 발송, 상품 제공 자동화 구현으로 확장할 수 있습니다.
 
 ## NICEPAY 준비
 
