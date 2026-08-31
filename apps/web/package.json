@@ -12,7 +12,7 @@
     "preview:vite": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@cssp/shared": "*",
+    "@cssp/shared": "workspace:*",
     "@tosspayments/tosspayments-sdk": "^2.7.1",
     "@vitejs/plugin-react": "^4.3.1",
     "lucide-react": "^0.468.0",
