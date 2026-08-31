@@ -1316,7 +1316,7 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         <Stat icon={<CreditCard />} label="총 결제액" value={`${revenue.toLocaleString()}원`} />
         <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
-      <SupportTable supports={supports} />
+      <PaymentTable supports={supports} />
     </section>
   );
 }
