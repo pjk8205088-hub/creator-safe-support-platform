@@ -73,6 +73,8 @@ type PaymentOrder = {
   paidAt?: string;
 };
 
+type Support = PaymentOrder;
+
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
