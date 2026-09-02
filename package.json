@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm:dev -w apps/api\" \"npm:dev -w apps/web\"",
-    "build": "npm run build -w packages/shared && npm run build -w apps/web && npm run build -w apps/api",
+    "build": "npm run build -w packages/shared && npm run build -w apps/web && npm run prisma:generate -w apps/api && npm run build -w apps/api",
     "start": "npm run start -w apps/api",
     "test": "node scripts/smoke-test.mjs",
     "lint": "echo lint-ready",
