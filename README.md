@@ -50,6 +50,17 @@ cp apps/api/.env.example apps/api/.env
 
 Railway 한 프로젝트 안에서 앱 서비스 1개와 MySQL 서비스 1개를 사용합니다. 앱 서비스는 빌드 시 Next.js 프론트를 export하고 Express API를 컴파일한 뒤, 실행 시 API와 홈페이지를 같은 도메인에서 제공합니다.
 
+### GitHub 자동 배포
+
+Railway의 `influencer-korea` 서비스는 `pjk8205088-hub/creator-safe-support-platform` 저장소의 `main` 브랜치에 연결되어 있습니다. `main`에 커밋을 push하면 Railway가 해당 커밋을 자동으로 빌드·배포합니다.
+
+배포 상태는 Railway 대시보드 또는 다음 명령으로 확인합니다.
+
+```bash
+railway deployment list --service influencer-korea --environment production
+railway logs --service influencer-korea --environment production --latest --lines 100
+```
+
 필수 환경변수:
 
 - `DATABASE_URL`: Railway MySQL의 `${{MySQL.MYSQL_URL}}`
