@@ -85,7 +85,7 @@ type SessionUser = {
   id: string;
   name: string;
   email: string;
-  role: 'FAN' | 'CREATOR';
+  role: 'FAN' | 'CREATOR' | 'ADMIN';
   creatorSlug?: string;
 };
 
@@ -132,7 +132,7 @@ type PaymentOrderResponse = {
 
 const API =
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL : '') ||
-  (typeof location !== 'undefined' && location.hostname === 'localhost' ? 'http://localhost:4000' : '');
+  (typeof location !== 'undefined' ? (location.hostname === 'localhost' ? 'http://localhost:4000' : location.origin) : '');
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 const walletKey = 'cssp-demo-point-wallet';
@@ -199,83 +199,135 @@ const pointPackages: PointPackage[] = [
 const demoCreators: Creator[] = [
   {
     id: 'cr_1',
-    slug: 'hana',
-    displayName: '하나 인플루언서',
-    handle: '@hana.official',
-    bio: '인스타그램과 유튜브에서 팬들과 소통하는 라이프스타일 인플루언서입니다.',
+    slug: 'kang-su-a',
+    displayName: '강수아',
+    handle: '@sua.daily',
+    bio: '맑고 깨끗한 아름다움을 좋아하는 수아입니다. 자연스러운 데일리룩과 뷰티 팁을 나눠요.',
     categoryId: 'digital-content',
-    platform: 'YouTube',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300',
-    coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200',
+    platform: 'Instagram',
+    avatarUrl: '/influencers/kang-su-a.png',
+    coverUrl: '/influencers/kang-su-a-summer-resort-v1.png',
     addressMasked: '센터 중계 주소로 실제 배송지 비공개',
     wishlist: [
       {
-        id: 'wi_1',
-        title: '뷰티 비하인드 콘텐츠 패스',
-        price: 49000,
+        id: 'wi_sua_1',
+        title: '강수아 여름 리조트 에디션',
+        price: 29000,
         categoryId: 'digital-content',
-        imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
-        note: '구매 후 비하인드 사진과 영상 콘텐츠를 열람할 수 있습니다.'
+        imageUrl: '/influencers/kang-su-a-summer-resort-v1.png',
+        note: '여름 리조트에서 촬영한 만화형 포토 다이어리와 비하인드 콘텐츠입니다.'
       },
       {
-        id: 'wi_2',
-        title: '프리미엄 DM 이용권',
-        price: 15000,
+        id: 'wi_sua_2',
+        title: '수아 뷰티 루틴 DM 이용권',
+        price: 12000,
         categoryId: 'dm',
-        imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-        note: '구매 후 크리에이터에게 메시지를 보낼 수 있는 이용권입니다.'
+        imageUrl: '/influencers/kang-su-a.png',
+        note: '구매 후 수아에게 메시지를 보내고 뷰티 루틴 이야기를 나눌 수 있습니다.'
       }
     ]
   },
   {
     id: 'cr_2',
-    slug: 'min-games',
-    displayName: '민 스트리머',
-    handle: '@mingames',
-    bio: '게임 방송과 리뷰를 진행하며 디지털 콘텐츠와 실시간 DM 이용권을 운영합니다.',
+    slug: 'kim-do-jin',
+    displayName: '김도진',
+    handle: '@dojin.street',
+    bio: '도심의 네온사인처럼 빛나는 도진입니다. 힙합 스트릿 패션과 에너지를 나눠요.',
     categoryId: 'dm',
-    platform: 'Twitch',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
-    coverUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200',
+    platform: 'YouTube',
+    avatarUrl: '/influencers/kim-do-jin.png',
+    coverUrl: '/influencers/kim-do-jin.png',
     addressMasked: '가상 주소/센터 중계 사용',
     wishlist: [
       {
-        id: 'wi_3',
-        title: '실시간 DM 패스',
+        id: 'wi_dojin_1',
+        title: '도진 스트릿 에디션',
         price: 30000,
         categoryId: 'dm',
-        imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-        note: '구매자와 인플루언서가 1:1 메시지로 소통합니다.'
+        imageUrl: '/influencers/kim-do-jin.png',
+        note: '네온 스트릿 무드의 만화형 포토와 도진의 스타일 노트를 제공합니다.'
       },
       {
-        id: 'wi_4',
-        title: '입금/결제 알림',
-        price: 22000,
-        categoryId: 'kakao-alert',
-        imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-        note: 'NICEPAY 결제/입금정보를 알림톡으로 즉시 확인합니다.'
+        id: 'wi_dojin_2',
+        title: '도진 1:1 DM 이용권',
+        price: 15000,
+        categoryId: 'dm',
+        imageUrl: '/influencers/kim-do-jin.png',
+        note: '구매 후 도진에게 메시지를 보내고 스트릿 라이프 이야기를 나눌 수 있습니다.'
       }
     ]
   },
   {
     id: 'cr_3',
-    slug: 'yuri-beauty',
-    displayName: '유리 뷰티 인플루언서',
-    handle: '@yuri.beauty',
-    bio: '팬 등급과 활동 리포트를 기반으로 커뮤니티를 운영하는 뷰티 인플루언서입니다.',
+    slug: 'lee-ji-yun',
+    displayName: '이지윤',
+    handle: '@jiyun.look',
+    bio: '보랏빛 밤을 사랑하는 지윤입니다. 유니크한 룩과 저만의 감성을 여러분과 나누고 싶어요.',
     categoryId: 'membership',
     platform: 'Instagram',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-    coverUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200',
+    avatarUrl: '/influencers/lee-ji-yun.png',
+    coverUrl: '/influencers/lee-ji-yun.png',
     addressMasked: '주소 마스킹 대시보드 사용',
     wishlist: [
       {
-        id: 'wi_5',
-        title: 'VIP 멤버십 패스',
+        id: 'wi_jiyun_1',
+        title: '지윤 나이트 룩북',
+        price: 24000,
+        categoryId: 'membership',
+        imageUrl: '/influencers/lee-ji-yun.png',
+        note: '도시의 밤을 담은 만화형 룩북과 스타일링 메모를 열람할 수 있습니다.'
+      },
+      {
+        id: 'wi_jiyun_2',
+        title: '지윤 멤버십 패스',
         price: 18000,
         categoryId: 'membership',
-        imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800',
+        imageUrl: '/influencers/lee-ji-yun.png',
         note: '기간형 멤버십과 전용 콘텐츠, 활동 등급 혜택을 제공합니다.'
+      }
+    ]
+  },
+  {
+    id: 'cr_4',
+    slug: 'han-areum',
+    displayName: '한아름',
+    handle: '@areum.frames',
+    bio: '매일의 순간을 한 장면처럼 기록합니다. 여행과 패션, 기분 좋은 이야기를 전해요.',
+    categoryId: 'digital-content',
+    platform: 'Instagram',
+    avatarUrl: '/influencers/han-areum-v1.png',
+    coverUrl: '/influencers/han-areum-v1.png',
+    addressMasked: '센터 중계 주소로 실제 배송지 비공개',
+    wishlist: [
+      {
+        id: 'wi_areum_1',
+        title: '아름 프레임 포토 에디션',
+        price: 16000,
+        categoryId: 'digital-content',
+        imageUrl: '/influencers/han-areum-v1.png',
+        note: '아름의 시선으로 담아낸 여행과 일상 만화형 포토 에디션입니다.'
+      }
+    ]
+  },
+  {
+    id: 'cr_5',
+    slug: 'moon-ha-rin',
+    displayName: '문하린',
+    handle: '@harin.notes',
+    bio: '비 오는 날의 책방처럼 차분하고 따뜻한 이야기를 전하는 라이프스타일 크리에이터입니다.',
+    categoryId: 'kakao-alert',
+    platform: 'Instagram',
+    avatarUrl: '/influencers/moon-ha-rin-v1.png',
+    coverUrl: '/influencers/moon-ha-rin-v1.png',
+    addressMasked: '주소 마스킹 대시보드 사용',
+    wishlist: [
+      {
+        id: 'wi_harin_1',
+        title: '하린의 비 오는 날 노트',
+        price: 14000,
+        categoryId: 'kakao-alert',
+        imageUrl: '/influencers/moon-ha-rin-v1.png',
+        note: '하린의 짧은 글과 만화형 일러스트를 담은 디지털 노트입니다.'
       }
     ]
   }
@@ -304,7 +356,8 @@ function saveWalletPoints(points: number) {
 async function getJson<T>(path: string, fallback: T): Promise<T> {
   if (!API) return fallback;
   try {
-    const response = await fetch(`${API}${path}`);
+    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+    const response = await fetch(`${API}${path}`, { headers: stored?.token ? { Authorization: `Bearer ${stored.token}` } : {} });
     if (!response.ok) return fallback;
     return (await response.json()) as T;
   } catch {
@@ -326,6 +379,7 @@ function createDemoSession(name: string, email: string, role: 'FAN' | 'CREATOR' 
 }
 
 export function App() {
+  const [verifiedAdmin, setVerifiedAdmin] = useState(false);
   const [page, setPage] = useState(location.hash.replace('#', '') || 'home');
   const [categories, setCategories] = useState<Category[]>(demoCategories);
   const [creators, setCreators] = useState<Creator[]>(demoCreators);
@@ -354,7 +408,7 @@ export function App() {
     const [categoryData, creatorData, supportData] = await Promise.all([
       getJson<Category[]>('/api/categories', demoCategories),
       getJson<Creator[]>('/api/creators', demoCreators),
-      getJson<Support[]>('/api/supports', readStoredSupports())
+      getJson<Support[]>('/api/supports', [])
     ]);
     setCategories(categoryData);
     setCreators(creatorData);
@@ -382,10 +436,23 @@ export function App() {
 
   useEffect(() => {
     if (!session) {
+      setVerifiedAdmin(false);
       localStorage.removeItem(sessionKey);
       return;
     }
     localStorage.setItem(sessionKey, JSON.stringify(session));
+    let active = true;
+    setVerifiedAdmin(false);
+    fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('Session expired');
+        const data = await response.json();
+        if (active) {
+          setVerifiedAdmin(data.user.role === 'ADMIN');
+          await load();
+        }
+      }).catch(() => { if (active) setSession(null); });
+    return () => { active = false; };
   }, [session]);
 
   const activeCategory = page.startsWith('category/') ? page.split('/')[1] : '';
@@ -405,10 +472,7 @@ export function App() {
   );
 
   function chargePoints(pointPackage: PointPackage) {
-    const nextPoints = walletPoints + pointPackage.points;
-    saveWalletPoints(nextPoints);
-    setWalletPoints(nextPoints);
-    location.hash = 'wallet';
+    alert('결제 연동 점검 중입니다. 포인트 충전 및 결제는 진행되지 않았습니다.');
   }
 
   function beginCheckout(item: WishlistItem) {
@@ -485,7 +549,10 @@ export function App() {
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
       {page === 'admin-login' && <AuthPage mode="login" session={session} setSession={setSession} />}
-      {page.startsWith('admin') && page !== 'admin-login' && (
+      {page.startsWith('admin') && page !== 'admin-login' && !verifiedAdmin && (
+        <section className="page-shell"><p>관리자 로그인이 필요합니다.</p><a href="#admin-login">관리자 로그인</a></section>
+      )}
+      {page.startsWith('admin') && page !== 'admin-login' && verifiedAdmin && (
         <Admin
           page={page}
           supports={supports}
@@ -579,8 +646,8 @@ function Home({
               결제 시작
               <ArrowRight size={18} />
             </a>
-            <a className="ghost-button large" href="https://app.litt.ly/login" target="_blank" rel="noreferrer">
-              litt.ly 로그인 연결
+            <a className="ghost-button large" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">
+              리틀리 페이지 열기
               <ArrowRight size={18} />
             </a>
           </div>
@@ -961,58 +1028,13 @@ function CheckoutPage({
           body: JSON.stringify(payload)
         });
         if (!response.ok) {
-          throw new Error(`주문 생성 실패 (${response.status})`);
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.message || `주문 생성 실패 (${response.status})`);
         }
-        const order = (await response.json()) as PaymentOrderResponse;
-        const confirm = await fetch(`${API}/api/payments/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: order.orderId, paymentKey: order.paymentKey })
-        });
-        if (!confirm.ok) {
-          throw new Error(`결제 승인 실패 (${confirm.status})`);
-        }
-        const confirmed = await confirm.json();
-        await onComplete(order, {
-          id: confirmed.supportId ?? `sp_${Date.now()}`,
-          creatorId: draft.creatorId,
-          supporterName: draft.supporterName,
-          message: draft.message,
-          amount: draft.amount,
-          status: 'PAID',
-          adminFee: confirmed.adminFee ?? order.adminFee,
-          creatorPayout: confirmed.creatorPayout ?? order.creatorPayout,
-          payoutDestination: confirmed.payoutDestination ?? order.payoutDestination,
-          payoutStatus: confirmed.payoutStatus ?? 'PENDING',
-          createdAt: new Date().toISOString()
-        });
-        return;
+        throw new Error('PG 결제창 연동이 완료되지 않았습니다. 결제 승인 및 상품 지급은 진행되지 않았습니다.');
       }
 
-      const fallbackOrder: PaymentOrderResponse = {
-        orderId: `ord_${Date.now()}`,
-        paymentProvider: provider,
-        amount: draft.amount,
-        adminFee,
-        creatorPayout,
-        payoutDestination: 'ADMIN_DASHBOARD',
-        paymentKey: `mock_${Date.now()}`
-      };
-      const support: Support = {
-        id: `sp_${Date.now()}`,
-        creatorId: draft.creatorId,
-        supporterName: draft.supporterName,
-        message: draft.message,
-        amount: draft.amount,
-        status: 'PAID',
-        adminFee,
-        creatorPayout,
-        payoutDestination: 'ADMIN_DASHBOARD',
-        payoutStatus: 'PENDING',
-        createdAt: new Date().toISOString()
-      };
-      saveStoredSupports([support, ...readStoredSupports()]);
-      await onComplete(fallbackOrder, support);
+      throw new Error('결제 서버에 연결할 수 없습니다. 결제되지 않았습니다.');
     } catch (error_) {
       setError(error_ instanceof Error ? error_.message : '결제를 완료할 수 없습니다.');
     } finally {
@@ -1026,11 +1048,10 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>이 화면에서 PG 주문을 만들고, 승인 후 관리자 정산과 인플러언서 지급 예정액을 함께 기록합니다.</p>
+          <p>PG 연동 점검 중입니다. 현재 결제 및 자동 정산은 제공되지 않습니다.</p>
+          <a className="ghost-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리 페이지 열기</a>
+          <p>외부 페이지 이용 내역은 현재 홈페이지 포인트와 자동 연동되지 않습니다.</p>
         </div>
-        <a className="ghost-button" href="https://app.litt.ly/page" target="_blank" rel="noreferrer">
-          litt.ly 결제 페이지 열기
-        </a>
       </div>
       <div className="checkout-layout">
         <article className="checkout-summary">
@@ -1166,23 +1187,35 @@ function AuthPage({
   const [busy, setBusy] = useState(false);
   const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
 
-  useEffect(() => {
-    if (!isAdminLogin) return;
-    const adminSession = createDemoSession('관리자', email.trim() || 'admin@influencer-korea.local', 'CREATOR');
-    setSession(adminSession);
-    location.hash = 'admin';
-  }, [email, isAdminLogin, setSession]);
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError('');
 
     if (mode === 'login') {
-      const normalizedEmail = email.trim() || (isAdminLogin ? 'admin@influencer-korea.local' : 'demo@influencer-korea.local');
+      if (API) {
+        const response = await fetch(`${API}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        }).catch(() => null);
+        if (response?.ok) {
+          const nextSession = (await response.json()) as Session;
+          if (isAdminLogin && nextSession.user.role !== 'ADMIN') {
+            setBusy(false);
+            setError('관리자 계정만 관리자 페이지에 로그인할 수 있습니다.');
+            return;
+          }
+          setSession(nextSession);
+          location.hash = isAdminLogin ? 'admin' : 'dashboard';
+          return;
+        }
+        setBusy(false);
+        setError('이메일 또는 비밀번호를 확인해 주세요.');
+        return;
+      }
       setBusy(false);
-      setSession(createDemoSession(isAdminLogin ? '관리자' : '하나 인플루언서', normalizedEmail, 'CREATOR'));
-      location.hash = isAdminLogin ? 'admin' : 'dashboard';
+      setError('로그인 서버에 연결할 수 없습니다.');
       return;
     }
 
@@ -1202,29 +1235,11 @@ function AuthPage({
     }
 
     setBusy(false);
-    setSession(createDemoSession(name || '새 인플루언서', email || 'new@influencer-korea.local', role));
-    location.hash = 'dashboard';
+    setError('가입에 실패했습니다. 이메일 중복 여부와 서버 연결을 확인해 주세요.');
   }
 
   async function socialDemo(provider: string) {
-    setBusy(true);
-    setError('');
-    const demoEmail = `${provider.toLowerCase()}@influencer-korea.local`;
-    if (API) {
-      const response = await fetch(`${API}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: `${provider} 데모`, email: demoEmail, password: 'password123', role: 'CREATOR' })
-      }).catch(() => null);
-      if (response?.ok) {
-        setSession((await response.json()) as Session);
-        location.hash = 'dashboard';
-        return;
-      }
-    }
-    setBusy(false);
-    setSession(createDemoSession(`${provider} 데모`, demoEmail));
-    location.hash = 'dashboard';
+    setError(`${provider} 로그인은 아직 연결되지 않았습니다. 이메일 로그인을 이용해 주세요.`);
   }
 
   if (session && !isAdminLogin) {
@@ -1251,7 +1266,7 @@ function AuthPage({
         </span>
         <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? '로그인' : '가입하기'}</h1>
         {isAdminLogin ? (
-          <p className="auth-copy">이 화면은 테스트용으로 열려 있습니다. 어떤 아이디와 비밀번호를 넣어도 관리자 화면으로 이동합니다.</p>
+          <p className="auth-copy">승인된 관리자 계정으로 로그인해 주세요.</p>
         ) : null}
         <div className="social-row">
           {['Kakao', 'Naver', 'Instagram'].map(provider => (
@@ -1283,8 +1298,8 @@ function AuthPage({
             type={isAdminLogin ? 'text' : 'email'}
             value={email}
             onChange={event => setEmail(event.target.value)}
-            placeholder={isAdminLogin ? '아이디를 아무거나 입력하세요' : 'you@example.com'}
-            required={!isAdminLogin}
+            placeholder={isAdminLogin ? '관리자 이메일' : 'you@example.com'}
+            required
           />
         </label>
         <label>
@@ -1293,8 +1308,8 @@ function AuthPage({
             type="password"
             value={password}
             onChange={event => setPassword(event.target.value)}
-            placeholder={isAdminLogin ? '비밀번호도 아무거나 입력하세요' : '비밀번호 입력'}
-            required={!isAdminLogin}
+            placeholder="비밀번호 입력"
+            required
           />
         </label>
         {error && <p className="form-error">{error}</p>}
@@ -1354,6 +1369,18 @@ function Admin({
 }) {
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
+  const [dataError, setDataError] = useState('');
+  const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string }>>([]);
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+    const headers = { Authorization: `Bearer ${stored?.token || ''}` };
+    Promise.all(['/api/admin/users', '/api/admin/settings'].map(async path => {
+      const response = await fetch(`${API}${path}`, { headers });
+      if (!response.ok) throw new Error('관리자 데이터를 불러올 수 없습니다. 다시 로그인해 주세요.');
+      return response.json();
+    })).then(([users, settings]) => { setMembers(users); setFeeRate(settings.commissionRate); })
+      .catch(error => setDataError(error.message));
+  }, []);
   const section = page === 'admin' ? 'dashboard' : page.replace('admin-', '');
   const [fanDraft, setFanDraft] = useState({ name: '새 팬', email: '', level: 'B' });
   const [creatorDraft, setCreatorDraft] = useState({
@@ -1425,7 +1452,11 @@ function Admin({
       }));
   }, [supports]);
 
-  const mergedFans = [...localFans, ...fanRows];
+  const mergedFans = members.filter(member => member.role === 'FAN').map(member => ({
+    name: member.displayName, email: member.email, tier: member.grade, lastSeen: member.createdAt,
+    total: fanRows.find(row => row.email === member.email)?.total || 0,
+    count: fanRows.find(row => row.email === member.email)?.count || 0
+  }));
   const mergedCreators = [
     ...localCreators,
     ...creatorRows.map(creator => ({
@@ -1438,33 +1469,11 @@ function Admin({
       status: creator.status
     }))
   ];
-  const totalMembers = mergedFans.length + mergedCreators.length + 1;
-  const dmRows = [
-    {
-      id: 'dm-20260831-001',
-      fan: '김민지',
-      creator: '강수아',
-      channel: 'Instagram DM',
-      message: '프리미엄 DM 이용권 결제 후 이미지와 메시지 전송',
-      status: '전송대기',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'kakao-20260831-002',
-      fan: '박준호',
-      creator: '김도진',
-      channel: 'Kakao Alimtalk',
-      message: '10,000P 이상 결제 조건 충족 알림 로그',
-      status: '발송완료',
-      createdAt: new Date().toISOString()
-    }
-  ].filter(row => {
-    if (!normalizedQuery) return true;
-    return `${row.id} ${row.fan} ${row.creator} ${row.channel} ${row.message} ${row.status}`.toLowerCase().includes(normalizedQuery);
-  });
+  const totalMembers = members.length;
+  const dmRows: Array<{ id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }> = [];
 
   const settlementRows = mergedCreators.map(creator => {
-    const adminFee = Math.round((creator.total * feeRate) / 100);
+    const adminFee = supports.filter(order => order.creatorId === creator.id && order.status === 'PAID').reduce((sum, order) => sum + (order.adminFee || 0), 0);
     return {
       ...creator,
       adminFee,
@@ -1555,6 +1564,9 @@ function Admin({
       </aside>
 
       <div className="admin-main">
+        <p role="status">NICEPAY 키 발급 대기 · 결제/환불/자동 지급 미연결</p>
+        <a href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">연결된 리틀리 페이지 확인</a>
+        {dataError && <p role="alert">{dataError}</p>}
         <header className="admin-topbar">
           <div>
             <span className="kicker">Admin</span>
@@ -1611,16 +1623,28 @@ function Admin({
             <div className="settings-card">
               <label>
                 현재 수수료율
-                <input type="range" min={1} max={100} value={feeRate} onChange={event => setFeeRate(Number(event.target.value))} />
+                <input type="range" min={0} max={100} value={feeRate} onChange={event => setFeeRate(Number(event.target.value))} />
+                <button type="button" onClick={async () => {
+                  try {
+                    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+                    const response = await fetch(`${API}/api/admin/settings`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` },
+                      body: JSON.stringify({ commissionRate: feeRate })
+                    });
+                    if (!response.ok) throw new Error('수수료를 저장하지 못했습니다.');
+                    setDataError('');
+                    alert('신규 주문 수수료를 저장했습니다. 기존 주문에는 변경되지 않습니다.');
+                  } catch { setDataError('수수료를 저장하지 못했습니다. 다시 시도해 주세요.'); }
+                }}>수수료 저장</button>
               </label>
               <div className="settings-metrics">
                 <div>
                   <span>관리자 수수료</span>
-                  <b>{Math.round((adminFeeTotal * feeRate) / 25).toLocaleString()}원</b>
+                  <b>{adminFeeTotal.toLocaleString()}원</b>
                 </div>
                 <div>
                   <span>인플러언서 지급액</span>
-                  <b>{Math.max(0, creatorPayoutTotal - Math.round((adminFeeTotal * (feeRate - 25)) / 25)).toLocaleString()}원</b>
+                  <b>{creatorPayoutTotal.toLocaleString()}원</b>
                 </div>
               </div>
             </div>
@@ -1696,7 +1720,7 @@ function Admin({
                   <option value="C">C</option>
                 </select>
               </label>
-              <button className="solid-button" type="button" onClick={registerFan}>
+              <button className="solid-button" type="button" onClick={() => alert('팬 계정은 홈페이지 회원가입에서 등록해 주세요. 관리자 대리 가입은 아직 지원하지 않습니다.')}>
                 팬 등록
               </button>
             </div>
@@ -1735,7 +1759,7 @@ function Admin({
                 프로필 이미지
                 <input value={creatorDraft.avatarUrl} onChange={event => setCreatorDraft({ ...creatorDraft, avatarUrl: event.target.value })} />
               </label>
-              <button className="solid-button" type="button" onClick={registerCreator}>
+              <button className="solid-button" type="button" onClick={() => alert('인플루언서 계정은 홈페이지 회원가입에서 등록해 주세요. 관리자 대리 가입은 아직 지원하지 않습니다.')}>
                 인플러언서 등록
               </button>
             </div>

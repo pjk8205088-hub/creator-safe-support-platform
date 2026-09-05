@@ -1,0 +1,5 @@
+{
+  "buildCommand": "pnpm --filter @cssp/shared build && pnpm --filter @cssp/api build && pnpm --filter @cssp/web build",
+  "outputDirectory": "apps/web/next-dist",
+  "installCommand": "pnpm install --frozen-lockfile"
+}

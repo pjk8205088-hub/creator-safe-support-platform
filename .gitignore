@@ -4,6 +4,10 @@ packages/*/node_modules/
 .vite/
 .npm-cache/
 dist/.vite/
+apps/web/.next/
+apps/web/next-dist/
 *.log
 .env
 .env.local
+.vercel
+.env*

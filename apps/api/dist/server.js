@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -7,121 +8,184 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
 app.use(express.json());
-const prisma = process.env.DATABASE_URL ? new PrismaClient() : null;
+const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
+    ? new PrismaClient({
+        adapter: new PrismaLibSQL({
+            url: process.env.TURSO_DATABASE_URL,
+            authToken: process.env.TURSO_AUTH_TOKEN
+        })
+    })
+    : process.env.DATABASE_URL
+        ? new PrismaClient()
+        : null;
 const categories = [
     {
-        id: 'streaming',
-        name: 'Streaming Gear',
-        description: '방송 장비, 조명, 마이크처럼 팬이 바로 응원하기 좋은 아이템',
-        imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=900',
+        id: 'digital-content',
+        name: '디지털 콘텐츠',
+        description: '포인트로 크리에이터별 사진, 영상, 비하인드 콘텐츠 패스를 구매합니다.',
+        imageUrl: '/influencers/trendy-influencers-wall.png',
         featured: true
     },
     {
-        id: 'lifestyle',
-        name: 'Lifestyle',
-        description: '카페, 건강, 데스크 셋업 등 크리에이터의 일상을 지켜주는 선물',
+        id: 'kakao-alert',
+        name: '카카오 알림톡',
+        description: '포인트 충전, 디지털 상품 제공, DM 이용권 상태를 알림으로 확인합니다.',
         imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=900',
         featured: true
     },
     {
-        id: 'beauty',
-        name: 'Beauty',
-        description: '뷰티 촬영, 리뷰 콘텐츠, 셀프 케어에 맞춘 위시리스트',
+        id: 'dm',
+        name: 'DM 메시지',
+        description: '구매한 이용권 범위에서 스팸 필터가 적용된 1:1 메시지를 주고받습니다.',
         imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900'
     },
     {
-        id: 'digital',
-        name: 'Digital',
-        description: '구독권, 소프트웨어, 디지털 콘텐츠 패스와 멤버십 이용권',
+        id: 'membership',
+        name: '멤버십 패스',
+        description: '기간형 멤버십과 활동 등급, 디지털 콘텐츠 이용 현황을 관리합니다.',
         imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900'
     }
 ];
 const creators = [
     {
         id: 'cr_1',
-        slug: 'hana',
-        displayName: '하나 스튜디오',
-        handle: '@hana.studio',
-        bio: '일상, 뷰티, 데스크 셋업 콘텐츠를 만드는 크리에이터입니다.',
-        categoryId: 'lifestyle',
-        platform: 'YouTube',
-        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300',
-        coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200',
+        slug: 'kang-su-a',
+        displayName: '강수아',
+        handle: '@sua.daily',
+        bio: '맑고 깨끗한 아름다움을 좋아하는 수아입니다. 자연스러운 데일리룩과 뷰티 팁을 나눠요.',
+        categoryId: 'digital-content',
+        platform: 'Instagram',
+        avatarUrl: '/influencers/kang-su-a.png',
+        coverUrl: '/influencers/kang-su-a-summer-resort-v1.png',
         safeAddress: '서울특별시 강남구 테헤란로 123 10층',
         wishlist: [
             {
-                id: 'wi_1',
-                title: '촬영용 무드 조명',
-                price: 49000,
-                categoryId: 'streaming',
-                imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
-                note: '밤 촬영 때 화면 톤을 안정적으로 맞추고 싶어요.'
+                id: 'wi_sua_1',
+                title: '강수아 여름 리조트 에디션',
+                price: 29000,
+                categoryId: 'digital-content',
+                imageUrl: '/influencers/kang-su-a-summer-resort-v1.png',
+                note: '여름 리조트에서 촬영한 만화형 포토 다이어리와 비하인드 콘텐츠입니다.'
             },
             {
-                id: 'wi_2',
-                title: '카페 작업 디지털 에디션',
-                price: 15000,
-                categoryId: 'lifestyle',
-                imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-                note: '편집 비하인드 사진과 작업 노트를 열람할 수 있습니다.'
+                id: 'wi_sua_2',
+                title: '수아 뷰티 루틴 DM 이용권',
+                price: 12000,
+                categoryId: 'dm',
+                imageUrl: '/influencers/kang-su-a.png',
+                note: '구매 후 수아에게 메시지를 보내고 뷰티 루틴 이야기를 나눌 수 있습니다.'
             }
         ]
     },
     {
         id: 'cr_2',
-        slug: 'min-games',
-        displayName: '민 게임즈',
-        handle: '@mingames',
-        bio: '게임 방송과 리뷰를 진행하며 안전한 선물 문화를 만들고 있습니다.',
-        categoryId: 'streaming',
-        platform: 'Twitch',
-        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
-        coverUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200',
+        slug: 'kim-do-jin',
+        displayName: '김도진',
+        handle: '@dojin.street',
+        bio: '도심의 네온사인처럼 빛나는 도진입니다. 힙합 스트릿 패션과 에너지를 나눠요.',
+        categoryId: 'dm',
+        platform: 'YouTube',
+        avatarUrl: '/influencers/kim-do-jin.png',
+        coverUrl: '/influencers/kim-do-jin.png',
         safeAddress: '부산광역시 해운대구 센텀중앙로 55',
         wishlist: [
             {
-                id: 'wi_3',
-                title: '방송 비하인드 콘텐츠 패스',
+                id: 'wi_dojin_1',
+                title: '도진 스트릿 에디션',
                 price: 30000,
-                categoryId: 'streaming',
-                imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-                note: '방송 비하인드 영상과 전용 공지를 이용할 수 있습니다.'
+                categoryId: 'dm',
+                imageUrl: '/influencers/kim-do-jin.png',
+                note: '네온 스트릿 무드의 만화형 포토와 도진의 스타일 노트를 제공합니다.'
             },
             {
-                id: 'wi_4',
-                title: '게임 리뷰 구독권',
-                price: 22000,
-                categoryId: 'digital',
-                imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-                note: '신작 리뷰 콘텐츠 제작에 도움이 됩니다.'
+                id: 'wi_dojin_2',
+                title: '도진 1:1 DM 이용권',
+                price: 15000,
+                categoryId: 'dm',
+                imageUrl: '/influencers/kim-do-jin.png',
+                note: '구매 후 도진에게 메시지를 보내고 스트릿 라이프 이야기를 나눌 수 있습니다.'
             }
         ]
     },
     {
         id: 'cr_3',
-        slug: 'yuri-beauty',
-        displayName: '유리 뷰티',
-        handle: '@yuri.beauty',
-        bio: '스킨케어와 메이크업 루틴을 소개하는 뷰티 크리에이터입니다.',
-        categoryId: 'beauty',
+        slug: 'lee-ji-yun',
+        displayName: '이지윤',
+        handle: '@jiyun.look',
+        bio: '보랏빛 밤을 사랑하는 지윤입니다. 유니크한 룩과 저만의 감성을 여러분과 나누고 싶어요.',
+        categoryId: 'membership',
         platform: 'Instagram',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-        coverUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200',
+        avatarUrl: '/influencers/lee-ji-yun.png',
+        coverUrl: '/influencers/lee-ji-yun.png',
         safeAddress: '경기도 성남시 분당구 판교역로 99',
         wishlist: [
             {
-                id: 'wi_5',
-                title: '뷰티 촬영 배경지',
+                id: 'wi_jiyun_1',
+                title: '지윤 나이트 룩북',
+                price: 24000,
+                categoryId: 'membership',
+                imageUrl: '/influencers/lee-ji-yun.png',
+                note: '도시의 밤을 담은 만화형 룩북과 스타일링 메모를 열람할 수 있습니다.'
+            },
+            {
+                id: 'wi_jiyun_2',
+                title: '지윤 멤버십 패스',
                 price: 18000,
-                categoryId: 'beauty',
-                imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800',
-                note: '제품 컬러가 잘 보이는 촬영 배경을 준비하려고 해요.'
+                categoryId: 'membership',
+                imageUrl: '/influencers/lee-ji-yun.png',
+                note: '기간형 멤버십과 전용 콘텐츠, 활동 등급 혜택을 제공합니다.'
+            }
+        ]
+    },
+    {
+        id: 'cr_4',
+        slug: 'han-areum',
+        displayName: '한아름',
+        handle: '@areum.frames',
+        bio: '매일의 순간을 한 장면처럼 기록합니다. 여행과 패션, 기분 좋은 이야기를 전해요.',
+        categoryId: 'digital-content',
+        platform: 'Instagram',
+        avatarUrl: '/influencers/han-areum-v1.png',
+        coverUrl: '/influencers/han-areum-v1.png',
+        safeAddress: '서울특별시 중구 세종대로 100',
+        wishlist: [
+            {
+                id: 'wi_areum_1',
+                title: '아름 프레임 포토 에디션',
+                price: 16000,
+                categoryId: 'digital-content',
+                imageUrl: '/influencers/han-areum-v1.png',
+                note: '아름의 시선으로 담아낸 여행과 일상 만화형 포토 에디션입니다.'
+            }
+        ]
+    },
+    {
+        id: 'cr_5',
+        slug: 'moon-ha-rin',
+        displayName: '문하린',
+        handle: '@harin.notes',
+        bio: '비 오는 날의 책방처럼 차분하고 따뜻한 이야기를 전하는 라이프스타일 크리에이터입니다.',
+        categoryId: 'kakao-alert',
+        platform: 'Instagram',
+        avatarUrl: '/influencers/moon-ha-rin-v1.png',
+        coverUrl: '/influencers/moon-ha-rin-v1.png',
+        safeAddress: '대전광역시 유성구 대학로 291',
+        wishlist: [
+            {
+                id: 'wi_harin_1',
+                title: '하린의 비 오는 날 노트',
+                price: 14000,
+                categoryId: 'kakao-alert',
+                imageUrl: '/influencers/moon-ha-rin-v1.png',
+                note: '하린의 짧은 글과 만화형 일러스트를 담은 디지털 노트입니다.'
             }
         ]
     }
@@ -154,30 +218,62 @@ const dbReady = () => prisma !== null;
 async function seedDatabase() {
     if (!prisma)
         return;
-    const count = await prisma.creatorProfile.count();
-    if (count > 0)
-        return;
-    for (const creator of creators) {
-        await prisma.creatorProfile.create({
-            data: {
-                slug: creator.slug,
-                displayName: creator.displayName,
-                handle: creator.handle,
-                bio: creator.bio,
-                category: creator.categoryId,
-                platform: creator.platform,
-                avatarUrl: creator.avatarUrl,
-                coverUrl: creator.coverUrl,
-                instagramId: creator.slug,
-                digitalProducts: {
-                    create: creator.wishlist.map(item => ({
-                        title: item.title,
-                        imageUrl: item.imageUrl,
-                        description: item.note,
-                        pointPrice: item.price
-                    }))
+    const catalogVersion = 'comic-public-v3';
+    const catalogSetting = await prisma.adminSetting.findUnique({ where: { key: 'catalogVersion' } });
+    if (catalogSetting?.value !== catalogVersion) {
+        for (const creator of creators) {
+            const existing = await prisma.creatorProfile.findUnique({
+                where: { slug: creator.slug },
+                include: { digitalProducts: { orderBy: { priority: 'asc' } } }
+            });
+            const profile = existing
+                ? await prisma.creatorProfile.update({
+                    where: { id: existing.id },
+                    data: {
+                        displayName: creator.displayName,
+                        handle: creator.handle,
+                        bio: creator.bio,
+                        category: creator.categoryId,
+                        platform: creator.platform,
+                        avatarUrl: creator.avatarUrl,
+                        coverUrl: creator.coverUrl,
+                        instagramId: creator.slug,
+                        safeAddressMemo: creator.safeAddress
+                    }
+                })
+                : await prisma.creatorProfile.create({
+                    data: {
+                        slug: creator.slug,
+                        displayName: creator.displayName,
+                        handle: creator.handle,
+                        bio: creator.bio,
+                        category: creator.categoryId,
+                        platform: creator.platform,
+                        avatarUrl: creator.avatarUrl,
+                        coverUrl: creator.coverUrl,
+                        instagramId: creator.slug,
+                        safeAddressMemo: creator.safeAddress
+                    }
+                });
+            for (const [index, item] of creator.wishlist.entries()) {
+                const existingProduct = existing?.digitalProducts[index];
+                if (existingProduct) {
+                    await prisma.digitalProduct.update({
+                        where: { id: existingProduct.id },
+                        data: { title: item.title, imageUrl: item.imageUrl, description: item.note, pointPrice: item.price, isActive: true }
+                    });
+                }
+                else {
+                    await prisma.digitalProduct.create({
+                        data: { creatorId: profile.id, title: item.title, imageUrl: item.imageUrl, description: item.note, pointPrice: item.price }
+                    });
                 }
             }
+        }
+        await prisma.adminSetting.upsert({
+            where: { key: 'catalogVersion' },
+            update: { value: catalogVersion },
+            create: { key: 'catalogVersion', value: catalogVersion }
         });
     }
     await prisma.adminSetting.upsert({
@@ -185,6 +281,19 @@ async function seedDatabase() {
         update: {},
         create: { key: 'commissionRate', value: String(adminCommissionRate) }
     });
+    const adminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+    if (adminEmail && adminPassword) {
+        const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
+        if (existingAdmin)
+            return;
+        const passwordHash = await bcrypt.hash(adminPassword, 12);
+        await prisma.user.upsert({
+            where: { email: adminEmail },
+            update: {},
+            create: { email: adminEmail, passwordHash, role: 'ADMIN', displayName: '관리자' }
+        });
+    }
 }
 async function getCommissionRate() {
     if (!prisma)
@@ -242,7 +351,7 @@ function dbOrderToSupport(order) {
 }
 const AuthSchema = z.object({
     email: z.string().email(),
-    password: z.string().min(8)
+    password: z.string().min(4)
 });
 const SignupSchema = AuthSchema.extend({
     name: z.string().min(2).max(30),
@@ -253,17 +362,65 @@ function publicUser(user) {
     const { password, ...safe } = user;
     return safe;
 }
-function issueSession(user) {
+async function issueSession(user) {
     const token = `dev_${nanoid(32)}`;
-    sessions.set(token, user.id);
+    if (prisma) {
+        await prisma.adminSetting.create({ data: {
+                key: sessionStorageKey(token),
+                value: JSON.stringify({ userId: user.id, expiresAt: Date.now() + 8 * 60 * 60 * 1000 })
+            } });
+    }
+    else
+        sessions.set(token, user.id);
     return { token, user: publicUser(user) };
 }
-function getUserFromRequest(req) {
+function sessionStorageKey(token) {
+    return `session:${createHash('sha256').update(token).digest('hex')}`;
+}
+async function getUserFromRequest(req) {
     const header = req.header('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (!token || token.length > 200)
+        return undefined;
+    if (prisma) {
+        const record = await prisma.adminSetting.findUnique({ where: { key: sessionStorageKey(token) } });
+        if (!record)
+            return undefined;
+        const session = JSON.parse(record.value);
+        if (session.expiresAt <= Date.now())
+            return undefined;
+        const user = await prisma.user.findUnique({ where: { id: session.userId } });
+        if (!user)
+            return undefined;
+        return { id: user.id, name: user.displayName, email: user.email, password: '', role: user.role, createdAt: user.createdAt.toISOString() };
+    }
     const userId = sessions.get(token);
     return users.find(user => user.id === userId);
 }
+app.use('/api/admin', async (req, res, next) => {
+    try {
+        const user = await getUserFromRequest(req);
+        if (!user)
+            return res.status(401).json({ code: 'UNAUTHORIZED' });
+        if (user.role !== 'ADMIN')
+            return res.status(403).json({ code: 'FORBIDDEN' });
+        next();
+    }
+    catch {
+        res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' });
+    }
+});
+// Fail closed until the complete provider checkout and reconciliation flow is configured.
+app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req, res, next) => {
+    if (req.method === 'POST')
+        return res.status(503).json({ code: 'PG_NOT_READY', message: '결제 연동 점검 중입니다. 결제 및 포인트 지급은 진행되지 않습니다.' });
+    next();
+});
+app.get('/api/admin/pg-status', (_req, res) => res.json({
+    provider: 'NICEPAY', ready: false,
+    credentialsConfigured: Boolean(process.env.NICEPAY_CLIENT_ID && process.env.NICEPAY_SECRET_KEY),
+    checkoutVerified: false, refundVerified: false, payoutEnabled: false
+}));
 function creatorSummary(creator) {
     const { safeAddress, ...safe } = creator;
     return {
@@ -272,6 +429,7 @@ function creatorSummary(creator) {
     };
 }
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
 app.get('/api/categories', (_req, res) => {
     res.json(categories.map(category => ({
         ...category,
@@ -338,7 +496,7 @@ app.post('/api/auth/signup', async (req, res) => {
             data: {
                 email,
                 displayName: input.name,
-                passwordHash: input.password,
+                passwordHash: await bcrypt.hash(input.password, 12),
                 role: input.role,
                 ...(input.role === 'CREATOR'
                     ? {
@@ -358,7 +516,7 @@ app.post('/api/auth/signup', async (req, res) => {
                     : {})
             }
         });
-        return res.status(201).json({ token: `db_${user.id}`, user: publicUser({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role, createdAt: user.createdAt.toISOString() }) });
+        return res.status(201).json(await issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role, createdAt: user.createdAt.toISOString() }));
     }
     if (users.some(user => user.email === email))
         return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
@@ -374,28 +532,49 @@ app.post('/api/auth/signup', async (req, res) => {
         createdAt: new Date().toISOString()
     };
     users.push(user);
-    res.status(201).json(issueSession(user));
+    res.status(201).json(await issueSession(user));
 });
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
     const parsed = AuthSchema.safeParse(req.body);
     if (!parsed.success)
         return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
     const email = parsed.data.email.toLowerCase();
+    if (dbReady()) {
+        return seedDatabase().then(async () => {
+            const dbUser = await prisma.user.findUnique({ where: { email } });
+            const valid = dbUser?.passwordHash ? await bcrypt.compare(parsed.data.password, dbUser.passwordHash) : false;
+            if (!dbUser || !valid)
+                return res.status(401).json({ code: 'INVALID_CREDENTIALS' });
+            const user = {
+                id: dbUser.id,
+                name: dbUser.displayName,
+                email: dbUser.email,
+                password: '',
+                role: dbUser.role,
+                creatorSlug: undefined,
+                createdAt: dbUser.createdAt.toISOString()
+            };
+            users.push(user);
+            return res.json(await issueSession(user));
+        }).catch(() => res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' }));
+    }
     const user = users.find(item => item.email === email && item.password === parsed.data.password);
     if (!user)
         return res.status(401).json({ code: 'INVALID_CREDENTIALS' });
-    res.json(issueSession(user));
+    res.json(await issueSession(user));
 });
-app.get('/api/auth/me', (req, res) => {
-    const user = getUserFromRequest(req);
+app.get('/api/auth/me', async (req, res) => {
+    const user = await getUserFromRequest(req);
     if (!user)
         return res.status(401).json({ code: 'UNAUTHORIZED' });
     res.json({ user: publicUser(user) });
 });
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
     const header = req.header('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     sessions.delete(token);
+    if (prisma && token)
+        await prisma.adminSetting.deleteMany({ where: { key: sessionStorageKey(token) } });
     res.status(204).send();
 });
 app.post('/api/supports', (req, res) => {
@@ -578,6 +757,11 @@ app.post('/api/payments/confirm', async (req, res) => {
     });
 });
 app.get('/api/supports', async (_req, res) => {
+    const viewer = await getUserFromRequest(_req);
+    if (!viewer)
+        return res.status(401).json({ code: 'UNAUTHORIZED' });
+    if (viewer.role !== 'ADMIN')
+        return res.status(403).json({ code: 'FORBIDDEN' });
     if (dbReady()) {
         await seedDatabase();
         const orders = await prisma.digitalOrder.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 300 });
@@ -585,7 +769,12 @@ app.get('/api/supports', async (_req, res) => {
     }
     res.json(supports);
 });
-app.get('/api/payments/orders', (_req, res) => res.json(paymentOrders));
+app.get('/api/payments/orders', async (req, res) => {
+    const viewer = await getUserFromRequest(req);
+    if (viewer?.role !== 'ADMIN')
+        return res.status(403).json({ code: 'FORBIDDEN' });
+    res.json(paymentOrders);
+});
 app.get('/api/admin/summary', async (_req, res) => {
     if (dbReady()) {
         await seedDatabase();
@@ -639,7 +828,10 @@ app.get('/api/admin/payments', async (_req, res) => {
 });
 app.get('/api/admin/settings', async (_req, res) => res.json({ commissionRate: await getCommissionRate() }));
 app.post('/api/admin/settings', async (req, res) => {
-    const commissionRate = Math.max(1, Math.min(100, Number(req.body?.commissionRate ?? adminCommissionRate)));
+    const parsed = z.object({ commissionRate: z.number().min(0).max(100).finite() }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'VALIDATION_ERROR' });
+    const commissionRate = parsed.data.commissionRate;
     if (dbReady()) {
         await prisma.adminSetting.upsert({
             where: { key: 'commissionRate' },
@@ -660,5 +852,8 @@ if (fs.existsSync(path.join(webOutDir, 'index.html'))) {
         res.sendFile(path.join(webOutDir, 'index.html'));
     });
 }
-const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`API ready on http://localhost:${port}`));
+export default app;
+if (process.env.VERCEL !== '1') {
+    const port = Number(process.env.PORT ?? 4000);
+    app.listen(port, () => console.log(`API ready on http://localhost:${port}`));
+}

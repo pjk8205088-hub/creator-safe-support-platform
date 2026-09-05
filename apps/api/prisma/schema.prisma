@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("TURSO_DATABASE_URL")
 }
 
 enum Role {
@@ -35,10 +35,10 @@ model User {
   role           Role            @default(FAN)
   grade          String          @default("C")
   displayName    String
-  profileImage   String?         @db.VarChar(500)
+  profileImage   String?
   instagramId    String?
-  youtubeUrl     String?         @db.VarChar(500)
-  bio            String?         @db.Text
+  youtubeUrl     String?
+  bio            String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   creatorProfile CreatorProfile?
@@ -52,13 +52,13 @@ model CreatorProfile {
   slug            String           @unique
   displayName     String
   handle          String
-  bio             String           @db.Text
+  bio             String
   category        String           @default("creator")
   platform        String           @default("Instagram")
-  avatarUrl       String           @db.VarChar(500)
-  coverUrl        String           @db.VarChar(500)
+  avatarUrl       String
+  coverUrl        String
   instagramId     String?
-  youtubeUrl      String?          @db.VarChar(500)
+  youtubeUrl      String?
   safeAddressMemo String?
   isActive        Boolean          @default(true)
   user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -72,8 +72,8 @@ model DigitalProduct {
   id          String         @id @default(cuid())
   creatorId   String
   title       String
-  imageUrl    String?        @db.VarChar(500)
-  description String?        @db.Text
+  imageUrl    String?
+  description String?
   pointPrice  Int
   priority    Int            @default(0)
   isActive    Boolean        @default(true)
@@ -114,7 +114,7 @@ model DigitalOrder {
   fanId           String?
   purchaserName   String
   purchaserEmail  String?
-  message         String?            @db.Text
+  message         String?
   pointAmount     Int
   paymentProvider String
   paymentKey      String?
