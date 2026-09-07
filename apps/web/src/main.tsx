@@ -586,6 +586,10 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
         <a href="#policies">약관/환불</a>
       </div>
       <div className="nav-actions">
+        <a className="ghost-button" href="https://creator-safe-support-platform.vercel.app/#admin-login">
+          <LockKeyhole size={17} />
+          관리자 모드
+        </a>
         {session ? (
           <>
             <span className="account-chip">{session.user.name}</span>
