@@ -12,6 +12,8 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
+import { installNicepay } from './nicepay-routes.js';
+import { nicepayConfig } from './nicepay.js';
 
 type UserRole = 'FAN' | 'CREATOR' | 'ADMIN';
 type User = {
@@ -478,17 +480,22 @@ app.use('/api/admin', async (req, res, next) => {
   } catch { res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' }); }
 });
 
-// Fail closed until the complete provider checkout and reconciliation flow is configured.
+installNicepay(app, { prisma, getUser: getUserFromRequest, getRate: getCommissionRate });
+
+// Legacy mock-payment endpoints must never accept real orders.
 app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req, res, next) => {
   if (req.method === 'POST') return res.status(503).json({ code: 'PG_NOT_READY', message: '결제 연동 점검 중입니다. 결제 및 포인트 지급은 진행되지 않습니다.' });
   next();
 });
 
-app.get('/api/admin/pg-status', (_req, res) => res.json({
-  provider: 'NICEPAY', ready: false,
-  credentialsConfigured: Boolean(process.env.NICEPAY_CLIENT_ID && process.env.NICEPAY_SECRET_KEY),
-  checkoutVerified: false, refundVerified: false, payoutEnabled: false
-}));
+app.get('/api/admin/pg-status', (_req, res) => {
+  const config = nicepayConfig();
+  res.json({ provider: 'NICEPAY', ready: config.ready && dbReady(), mode: config.mode,
+    credentialsConfigured: Boolean(config.clientId && config.secretKey),
+    callbackUrl: config.origin ? `${config.origin}/api/payments/return` : null,
+    webhookUrl: config.origin ? `${config.origin}/api/payments/webhook` : null,
+    checkoutVerified: false, refundVerified: false, payoutEnabled: false });
+});
 
 function creatorSummary(creator: Creator) {
   const { safeAddress, ...safe } = creator;

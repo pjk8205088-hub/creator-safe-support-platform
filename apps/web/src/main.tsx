@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import { openNicepay } from './nicepay';
 import {
   BadgeCheck,
   BarChart3,
@@ -546,6 +547,7 @@ export function App() {
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
       {page === 'success' && <Success />}
+      {page.startsWith('payment-result/') && <PaymentResult orderId={page.slice('payment-result/'.length)} />}
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
       {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
       {page === 'admin-login' && <AuthPage mode="login" session={session} setSession={setSession} />}
@@ -582,7 +584,6 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
         <a href="#dashboard">대시보드</a>
         <a href="#business">사업자정보</a>
         <a href="#policies">약관/환불</a>
-        <a href="#admin">관리</a>
       </div>
       <div className="nav-actions">
         {session ? (
@@ -1013,7 +1014,7 @@ function CheckoutPage({
     setError('');
     const payload = {
       creatorId: draft.creatorId,
-      wishlistItemId: draft.wishlistItemId,
+      productId: draft.wishlistItemId,
       supporterName: draft.supporterName,
       message: draft.message,
       amount: draft.amount,
@@ -1022,16 +1023,20 @@ function CheckoutPage({
 
     try {
       if (API) {
-        const response = await fetch(`${API}/api/payments/orders`, {
+        const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+        if (!stored?.token) throw new Error('로그인 후 결제해 주세요.');
+        const response = await fetch(`${API}/api/payments/checkout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored.token}` },
           body: JSON.stringify(payload)
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.message || `주문 생성 실패 (${response.status})`);
+          throw new Error(failure.code === 'PG_NOT_READY' ? 'NICEPAY 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' ? '결제 준비 중인 상품입니다.' : `주문 생성 실패 (${response.status})`);
         }
-        throw new Error('PG 결제창 연동이 완료되지 않았습니다. 결제 승인 및 상품 지급은 진행되지 않았습니다.');
+        const order = await response.json();
+        await openNicepay(order.checkout, setError);
+        return;
       }
 
       throw new Error('결제 서버에 연결할 수 없습니다. 결제되지 않았습니다.');
@@ -1048,7 +1053,7 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>PG 연동 점검 중입니다. 현재 결제 및 자동 정산은 제공되지 않습니다.</p>
+          <p>NICEPAY 카드 결제 후 주문 상태를 확인할 수 있습니다. 가맹점 연결이 준비되면 이용 가능합니다.</p>
           <a className="ghost-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리 페이지 열기</a>
           <p>외부 페이지 이용 내역은 현재 홈페이지 포인트와 자동 연동되지 않습니다.</p>
         </div>
@@ -2021,6 +2026,34 @@ function Step({ icon, title, text }: { icon: React.ReactNode; title: string; tex
   );
 }
 
+function PaymentResult({ orderId }: { orderId: string }) {
+  const [result, setResult] = useState<{ status: string; amount: number; mode: string } | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  async function refresh() {
+    setLoading(true);
+    setError('');
+    try {
+      const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+      if (!stored?.token) throw new Error('결제한 계정으로 로그인 후 다시 확인해 주세요.');
+      const response = await fetch(`${API}/api/payments/status?orderId=${encodeURIComponent(orderId)}`, { headers: { Authorization: `Bearer ${stored.token}` } });
+      if (!response.ok) throw new Error('주문 상태를 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.');
+      setResult(await response.json());
+    } catch (error) { setError(error instanceof Error ? error.message : '조회에 실패했습니다.'); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void refresh(); }, [orderId]);
+  return <section className="page-shell">
+    <h1>{result?.status === 'PAID' ? '결제가 확인되었습니다' : result?.status === 'REFUNDED' ? '결제가 취소되었습니다' : '결제 상태 확인'}</h1>
+    <p>주문번호: {orderId}</p>
+    {result && <p>{result.amount.toLocaleString()}원 {result.mode === 'sandbox' ? '(테스트 결제)' : ''}</p>}
+    {result?.status === 'PENDING_PAYMENT' && <p>아직 결제 완료가 확인되지 않았습니다. 재결제 전 주문 상태를 다시 확인해 주세요.</p>}
+    {error && <p role="alert">{error}</p>}
+    <button className="solid-button" disabled={loading} onClick={refresh}>{loading ? '확인 중' : '상태 새로고침'}</button>
+    <a className="ghost-button" href="#home">홈으로</a>
+  </section>;
+}
+
 function Success() {
   return (
     <section className="center">
@@ -2181,12 +2214,13 @@ function Footer() {
           <span>고객센터: {businessInfo.customerCenter}</span>
           <span>이메일: {businessInfo.email}</span>
         </div>
-        <div className="footer-links">
-          <a href="#business">사업자정보</a>
-          <a href="#policies">이용약관</a>
-          <a href="#policies">개인정보처리방침</a>
-          <a href="#policies">취소/환불정책</a>
-        </div>
+      <div className="footer-links">
+        <a href="#business">사업자정보</a>
+        <a href="#policies">이용약관</a>
+        <a href="#policies">개인정보처리방침</a>
+        <a href="#policies">취소/환불정책</a>
+        <a className="footer-admin-link" href="https://creator-safe-support-platform.vercel.app/#admin-login">관리자 로그인</a>
+      </div>
       </div>
     </footer>
   );
