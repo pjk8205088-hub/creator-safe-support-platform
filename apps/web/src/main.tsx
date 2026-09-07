@@ -2219,7 +2219,6 @@ function Footer() {
         <a href="#policies">이용약관</a>
         <a href="#policies">개인정보처리방침</a>
         <a href="#policies">취소/환불정책</a>
-        <a className="footer-admin-link" href="https://creator-safe-support-platform.vercel.app/#admin-login">관리자 로그인</a>
       </div>
       </div>
     </footer>
