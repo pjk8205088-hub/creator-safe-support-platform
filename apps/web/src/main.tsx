@@ -581,11 +581,10 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
         {businessInfo.serviceName}
       </a>
       <div className="nav-links">
-        <a href="#categories">서비스 기능</a>
-        <a href="#wallet">포인트 충전</a>
-        <a href="#dashboard">대시보드</a>
-        <a href="#business">사업자정보</a>
-        <a href="#policies">약관/환불</a>
+        <a href="#categories">크리에이터</a>
+        <a href="#creator-signup">셀럽 등록</a>
+        <a href="#fan-signup">팬 가입</a>
+        <a href="#business">안전 안내</a>
       </div>
       <div className="nav-actions">
         <a className="ghost-button" href="https://creator-safe-support-platform.vercel.app/#admin-login">
@@ -635,88 +634,41 @@ function Home({
 }) {
   return (
     <>
-      <section className="hero">
+      <section className="hero throne-hero">
         <div className="hero-overlay">
           <span className="eyebrow">
             <Sparkles size={16} />
-            포인트 기반 인플러언서 소통 플랫폼
+            CREATOR COMMUNITY · SEOUL
           </span>
-          <h1>포인트를 충전하고 인플러언서와 소통해보세요.</h1>
-          <p>인플러언서 코리아는 포인트 충전, 소통형 콘텐츠, DM 이용권, 기간형 멤버십을 연결합니다.</p>
+          <h1>좋아하는 셀럽과<br /><em>더 가까이.</em></h1>
+          <p>인플러언서 코리아에서 팬과 크리에이터가 안전하게 만나고, 메시지와 특별한 순간을 나눕니다.</p>
           <div className="hero-actions">
             <SearchBox value={query} onChange={setQuery} />
-            <a className="solid-button large" href={session ? '#dashboard' : '#signup'}>
-              {session ? '내 대시보드' : '간편 가입'}
+            <a className="solid-button large hero-primary" href={session ? '#dashboard' : '#fan-signup'}>
+              {session ? '내 커뮤니티' : '팬으로 시작하기'}
               <ArrowRight size={18} />
             </a>
-            <a className="ghost-button large" href="#categories">
-              결제 시작
-              <ArrowRight size={18} />
-            </a>
-            <a className="ghost-button large" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">
-              리틀리 페이지 열기
-              <ArrowRight size={18} />
-            </a>
-            <a className="ghost-button large" href="#fan-signup">팬 가입</a>
-            <a className="ghost-button large" href="#creator-signup">인플러언서 가입</a>
+            <a className="ghost-button large hero-secondary" href="#creator-signup">크리에이터로 참여하기</a>
           </div>
         </div>
+        <div className="hero-note"><span>01</span><b>Private by design</b><span>팬과 셀럽의 안전한 소통</span></div>
       </section>
-      <section className="content-band point-wallet-band">
+      <section className="content-band creator-showcase">
         <div className="section-head">
           <div>
-            <span className="kicker">Point Wallet</span>
-            <h2>포인트 충전</h2>
-          <p>충전 포인트는 소통형 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다. 현금 환전과 계정 간 이전은 지원하지 않습니다.</p>
+            <span className="kicker">Meet the creators</span>
+            <h2>오늘, 누구를 만나볼까요?</h2>
+            <p>당신의 타임라인을 빛내는 크리에이터를 발견하고 팬 커뮤니티에 참여해보세요.</p>
           </div>
-          <a className="solid-button" href="#wallet">
-            보유 포인트 {walletPoints.toLocaleString()}P
-            <ArrowRight size={16} />
-          </a>
-        </div>
-        <div className="review-grid">
-          {pointPackages.map(pointPackage => (
-            <article key={pointPackage.id}>
-              <CreditCard size={22} />
-              <h3>{pointPackage.name} · {pointPackage.points.toLocaleString()}P</h3>
-              <p>{pointPackage.description}</p>
-              <button className="solid-button" type="button" onClick={() => chargePoints(pointPackage)}>
-                {pointPackage.price.toLocaleString()}원 충전
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="content-band">
-        <div className="section-head">
-          <div>
-            <span className="kicker">Core Concept</span>
-            <h2>Throne의 한국형 재해석</h2>
-          </div>
-          <a className="text-link" href="#categories">
-            기능 전체 보기 <ArrowRight size={16} />
-          </a>
-        </div>
-        <CategoryGrid categories={categories.filter(category => category.featured).slice(0, 3)} />
-      </section>
-      <section className="content-band muted">
-        <div className="section-head">
-          <div>
-            <span className="kicker">Influencers</span>
-          <h2>인플러언서와 소통하는 페이지</h2>
-          </div>
+          <a className="text-link" href="#categories">전체 크리에이터 보기 <ArrowRight size={16} /></a>
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
-      <section className="content-band">
-        <div className="steps">
-          <Step icon={<WalletCards />} title="포인트 충전" text="NICEPAY 등 계약된 결제수단으로 포인트를 충전합니다." />
-          <Step icon={<CreditCard />} title="소통형 상품 이용" text="콘텐츠 패스, DM 이용권, 기간형 멤버십을 포인트로 이용합니다." />
-          <Step icon={<Bell />} title="이용 알림" text="결제와 디지털 상품 제공 상태를 카카오 알림톡으로 안내합니다." />
-        </div>
+      <section className="content-band community-band">
+        <div className="community-intro"><span className="kicker">How it feels</span><h2>팬의 하루에<br /><em>좋아하는 사람이</em> 머무는 곳</h2><p>공개 프로필부터 1:1 메시지까지, 관계의 속도는 당신이 정합니다.</p></div>
+        <div className="community-features"><article><span>01</span><HeartHandshake size={24} /><h3>나만의 팬 커뮤니티</h3><p>셀럽이 직접 전하는 공지와 이야기를 가장 먼저 만나보세요.</p></article><article><span>02</span><Bell size={24} /><h3>놓치지 않는 알림</h3><p>새 메시지와 라이브 소식을 원하는 채널로 받아보세요.</p></article><article><span>03</span><ShieldCheck size={24} /><h3>안심할 수 있는 프라이버시</h3><p>개인정보와 실제 주소를 보호하는 안전한 소통 환경입니다.</p></article></div>
       </section>
-      <ReviewReadySection />
-      <MvpSpecSection />
+      <section className="join-band"><div><span className="kicker">Your people are here</span><h2>당신의 이야기를<br />시작해보세요.</h2></div><div className="join-actions"><a className="solid-button large" href="#fan-signup">팬 가입하기 <ArrowRight size={18} /></a><a className="ghost-button large" href="#creator-signup">셀럽 등록하기</a></div></section>
     </>
   );
 }
