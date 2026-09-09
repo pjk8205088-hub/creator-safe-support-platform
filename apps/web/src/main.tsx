@@ -1479,7 +1479,9 @@ function Admin({
     }))
   ];
   const totalMembers = members.length;
-  const dmRows: Array<{ id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }> = [];
+  const [dmRows, setDmRows] = useState<Array<{ id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem('cssp-dm-logs') || '[]'); } catch { return []; }
+  });
 
   const settlementRows = mergedCreators.map(creator => {
     const adminFee = supports.filter(order => order.creatorId === creator.id && order.status === 'PAID').reduce((sum, order) => sum + (order.adminFee || 0), 0);
@@ -1798,7 +1800,7 @@ function Admin({
                 </div>
                 <span className="admin-badge light">로그 저장</span>
               </div>
-              <DmLogTable rows={dmRows} />
+              <CreatorCommunicationPanel creators={creators} supports={supports} dmRows={dmRows} setDmRows={setDmRows} />
             </section>
           )}
         </div>
@@ -1928,6 +1930,77 @@ function SettlementTable({
       </table>
     </div>
   );
+}
+
+function CreatorCommunicationPanel({
+  creators,
+  supports,
+  dmRows,
+  setDmRows
+}: {
+  creators: Creator[];
+  supports: Support[];
+  dmRows: Array<{ id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }>;
+  setDmRows: React.Dispatch<React.SetStateAction<Array<{ id: string; fan: string; creator: string; channel: string; message: string; status: string; createdAt: string }>>>;
+}) {
+  const [creatorId, setCreatorId] = useState(creators[0]?.id || '');
+  const [notice, setNotice] = useState('새 콘텐츠와 일정이 업데이트되었습니다.');
+  const [dmText, setDmText] = useState('');
+  const [threshold, setThreshold] = useState(10000);
+  const [rankVisible, setRankVisible] = useState(true);
+  const [tiers, setTiers] = useState([
+    { name: 'S', amount: 50000 }, { name: 'A', amount: 30000 }, { name: 'B', amount: 10000 }, { name: 'C', amount: 0 }
+  ]);
+  const [campaign, setCampaign] = useState({ title: '천만원 번지점프 방송', target: 10000000, raised: 0 });
+  const creator = creators.find(item => item.id === creatorId) || creators[0];
+  const creatorSupports = supports.filter(item => item.creatorId === creator?.id);
+  const total = creatorSupports.reduce((sum, item) => sum + item.amount, 0);
+  const ranking = [...new Map(creatorSupports.map(item => [item.supporterEmail || item.supporterName, item])).values()]
+    .sort((a, b) => b.amount - a.amount).slice(0, 10);
+
+  function saveLogs(next: typeof dmRows) {
+    setDmRows(next);
+    localStorage.setItem('cssp-dm-logs', JSON.stringify(next));
+  }
+  function addLog(channel: string, message: string, status: string) {
+    if (!creator || !message.trim()) return;
+    saveLogs([{ id: `dm-${Date.now()}`, fan: channel === '공지' ? '전체 팬' : '관리자', creator: creator.displayName,
+      channel, message: message.trim(), status, createdAt: new Date().toISOString() }, ...dmRows]);
+  }
+  function sendNotice() { addLog('전체 공지', notice, '발송 대기'); }
+  function sendDm() { addLog('유료 DM', dmText, '결제 후 열람'); setDmText(''); }
+  function saveSettings() { localStorage.setItem(`cssp-creator-settings-${creator?.id}`, JSON.stringify({ threshold, rankVisible, tiers, campaign })); }
+
+  return <div className="communication-studio">
+    <div className="admin-form-grid">
+      <label>셀럽 선택<select value={creatorId} onChange={event => setCreatorId(event.target.value)}>{creators.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+      <label>알림 기준 금액(원)<input type="number" min="0" value={threshold} onChange={event => setThreshold(Number(event.target.value))} /></label>
+      <label className="checkbox-field"><input type="checkbox" checked={rankVisible} onChange={event => setRankVisible(event.target.checked)} /> 후원 순위 1~10위 공개</label>
+      <button className="solid-button" type="button" onClick={saveSettings}>셀럽 설정 저장</button>
+    </div>
+    <div className="admin-form-grid">
+      <label>전체 DM 공지<textarea value={notice} onChange={event => setNotice(event.target.value)} /></label>
+      <button className="ghost-button" type="button" onClick={sendNotice}>전체 팬에게 공지</button>
+      <label>팬에게 보낼 유료 DM<textarea value={dmText} onChange={event => setDmText(event.target.value)} placeholder="사진/메시지는 결제 전 블러 상태로 노출" /></label>
+      <button className="ghost-button" type="button" onClick={sendDm}>유료 DM 등록</button>
+    </div>
+    <div className="settings-metrics">
+      <div><span>셀럽 누적 팬 활동 금액</span><b>{total.toLocaleString()}원</b></div>
+      <div><span>알림 조건</span><b>{threshold.toLocaleString()}원 이상</b></div>
+      <div><span>카카오 알림</span><b>{threshold > 0 ? '조건 충족 시 발송' : '꺼짐'}</b></div>
+    </div>
+    <div className="admin-form-grid tier-settings">
+      {tiers.map((tier, index) => <label key={tier.name}>등급명 {tier.name}<input value={tier.name} onChange={event => setTiers(prev => prev.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} /><input type="number" value={tier.amount} onChange={event => setTiers(prev => prev.map((item, i) => i === index ? { ...item, amount: Number(event.target.value) } : item))} /></label>)}
+    </div>
+    <div className="campaign-editor">
+      <label>프로젝트형 모금 제목<input value={campaign.title} onChange={event => setCampaign({ ...campaign, title: event.target.value })} /></label>
+      <label>목표 금액<input type="number" value={campaign.target} onChange={event => setCampaign({ ...campaign, target: Number(event.target.value) })} /></label>
+      <label>현재 달성 금액<input type="number" value={campaign.raised} onChange={event => setCampaign({ ...campaign, raised: Number(event.target.value) })} /></label>
+      <div><b>{campaign.title}</b><progress max={campaign.target || 1} value={Math.min(campaign.raised, campaign.target)} /><span>{Math.round((campaign.raised / Math.max(campaign.target, 1)) * 100)}% 달성 · {campaign.raised.toLocaleString()}원 / {campaign.target.toLocaleString()}원</span></div>
+    </div>
+    {rankVisible && <div className="table-scroll"><table className="admin-table"><thead><tr><th>순위</th><th>팬</th><th>등급</th><th>금액</th></tr></thead><tbody>{ranking.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.supporterName}</td><td>{tiers.find(tier => item.amount >= tier.amount)?.name || 'C'}</td><td>비공개</td></tr>)}</tbody></table></div>}
+    <DmLogTable rows={dmRows} />
+  </div>;
 }
 
 function DmLogTable({
