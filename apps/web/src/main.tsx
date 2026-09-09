@@ -546,6 +546,8 @@ export function App() {
       )}
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
+      {page === 'fan-signup' && <AuthPage mode="signup" signupRole="FAN" session={session} setSession={setSession} />}
+      {page === 'creator-signup' && <AuthPage mode="signup" signupRole="CREATOR" session={session} setSession={setSession} />}
       {page === 'success' && <Success />}
       {page.startsWith('payment-result/') && <PaymentResult orderId={page.slice('payment-result/'.length)} />}
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
@@ -655,6 +657,8 @@ function Home({
               리틀리 페이지 열기
               <ArrowRight size={18} />
             </a>
+            <a className="ghost-button large" href="#fan-signup">팬 가입</a>
+            <a className="ghost-button large" href="#creator-signup">인플러언서 가입</a>
           </div>
         </div>
       </section>
@@ -1185,17 +1189,19 @@ function ProductNotice() {
 
 function AuthPage({
   mode,
+  signupRole,
   session,
   setSession
 }: {
   mode: 'login' | 'signup';
+  signupRole?: 'FAN' | 'CREATOR';
   session: Session | null;
   setSession: (session: Session | null) => void;
 }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'FAN' | 'CREATOR'>('CREATOR');
+  const [role, setRole] = useState<'FAN' | 'CREATOR'>(signupRole || 'CREATOR');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
@@ -1277,7 +1283,7 @@ function AuthPage({
           <LockKeyhole size={16} />
           {isAdminLogin ? 'Operations Access' : mode === 'login' ? 'Welcome back' : 'Create account'}
         </span>
-        <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? '로그인' : '가입하기'}</h1>
+        <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? '로그인' : role === 'FAN' ? '팬 가입' : '인플러언서 가입'}</h1>
         {isAdminLogin ? (
           <p className="auth-copy">승인된 관리자 계정으로 로그인해 주세요.</p>
         ) : null}
@@ -1293,16 +1299,16 @@ function AuthPage({
           <>
             <label>
               이름
-              <input value={name} onChange={event => setName(event.target.value)} placeholder="인플루언서 이름" required />
+              <input value={name} onChange={event => setName(event.target.value)} placeholder={role === 'FAN' ? '팬 이름' : '인플러언서 이름'} required />
             </label>
-            <div className="segment">
+            {!signupRole && <div className="segment">
               <button type="button" className={role === 'CREATOR' ? 'active' : ''} onClick={() => setRole('CREATOR')}>
                 인플루언서
               </button>
               <button type="button" className={role === 'FAN' ? 'active' : ''} onClick={() => setRole('FAN')}>
                 팬
               </button>
-            </div>
+            </div>}
           </>
         )}
         <label>
@@ -1328,7 +1334,7 @@ function AuthPage({
         {error && <p className="form-error">{error}</p>}
         <button className="solid-button large" disabled={busy} type="submit">
           {mode === 'login' ? <LogIn size={18} /> : <UserPlus size={18} />}
-          {busy ? '처리 중' : isAdminLogin ? '관리자 화면 열기' : mode === 'login' ? '로그인' : '계정 만들기'}
+          {busy ? '처리 중' : isAdminLogin ? '관리자 화면 열기' : mode === 'login' ? '로그인' : '가입 완료하기'}
         </button>
         <p className="auth-switch">
           {isAdminLogin ? '관리자 화면이 열리지 않으면 새로고침하세요.' : mode === 'login' ? '계정이 없나요?' : '이미 계정이 있나요?'}{' '}
