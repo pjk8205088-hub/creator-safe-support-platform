@@ -664,6 +664,11 @@ function Home({
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
+      <section className="platform-strip"><span>CREATORS FROM EVERYWHERE</span><b>Instagram</b><b>YouTube</b><b>TikTok</b><b>Twitch</b><b>Live & private</b></section>
+      <section className="content-band how-band">
+        <div className="section-head"><div><span className="kicker">Simple by design</span><h2>시작은 가볍게,<br />연결은 오래도록.</h2></div></div>
+        <div className="how-grid"><article><span>01</span><h3>프로필을 발견해요</h3><p>좋아하는 크리에이터의 이야기와 분위기를 한눈에 살펴보세요.</p></article><article><span>02</span><h3>팬이 되어보세요</h3><p>가입하고 셀럽의 공지, 메시지, 팬 전용 소식을 받아보세요.</p></article><article><span>03</span><h3>진짜 대화를 나눠요</h3><p>안전한 DM 공간에서 서로의 속도로 더 가까워집니다.</p></article></div>
+      </section>
       <section className="content-band community-band">
         <div className="community-intro"><span className="kicker">How it feels</span><h2>팬의 하루에<br /><em>좋아하는 사람이</em> 머무는 곳</h2><p>공개 프로필부터 1:1 메시지까지, 관계의 속도는 당신이 정합니다.</p></div>
         <div className="community-features"><article><span>01</span><HeartHandshake size={24} /><h3>나만의 팬 커뮤니티</h3><p>셀럽이 직접 전하는 공지와 이야기를 가장 먼저 만나보세요.</p></article><article><span>02</span><Bell size={24} /><h3>놓치지 않는 알림</h3><p>새 메시지와 라이브 소식을 원하는 채널로 받아보세요.</p></article><article><span>03</span><ShieldCheck size={24} /><h3>안심할 수 있는 프라이버시</h3><p>개인정보와 실제 주소를 보호하는 안전한 소통 환경입니다.</p></article></div>
