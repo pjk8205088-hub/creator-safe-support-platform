@@ -1058,8 +1058,8 @@ function CheckoutPage({
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
           <p>NICEPAY 카드 결제 후 주문 상태를 확인할 수 있습니다. 가맹점 연결이 준비되면 이용 가능합니다.</p>
-          <a className="ghost-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리 페이지 열기</a>
-          <p>외부 페이지 이용 내역은 현재 홈페이지 포인트와 자동 연동되지 않습니다.</p>
+          <a className="solid-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리에서 결제하기</a>
+          <p>리틀리 결제 완료 후 주문번호를 관리자에게 전달하면 결제 내역을 확인할 수 있습니다. 리틀리 API/webhook 승인 정보가 등록되면 자동 반영으로 전환할 수 있습니다.</p>
         </div>
       </div>
       <div className="checkout-layout">
@@ -1105,8 +1105,11 @@ function CheckoutPage({
             <textarea value={draft.message} readOnly />
           </label>
           {error && <p className="form-error">{error}</p>}
-          <button className="solid-button large" type="button" onClick={pay} disabled={busy}>
-            {busy ? '결제 처리 중' : `${draft.amount.toLocaleString()}원 결제하기`}
+          <a className="solid-button large" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">
+            {draft.amount.toLocaleString()}원 리틀리에서 결제하기
+          </a>
+          <button className="ghost-button large" type="button" onClick={pay} disabled={busy}>
+            NICEPAY 연결 상태 확인
           </button>
           <button className="ghost-button large" type="button" onClick={onCancel}>
             돌아가기
@@ -1124,7 +1127,7 @@ function WalletPage({ walletPoints, chargePoints }: { walletPoints: number; char
         <div>
           <span className="kicker">Point Wallet</span>
           <h1>포인트 충전</h1>
-          <p>포인트는 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다.</p>
+        <p>포인트는 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스 구매에만 사용됩니다. 결제는 연결된 리틀리 페이지에서 진행합니다.</p>
         </div>
         <span className="account-chip">보유 {walletPoints.toLocaleString()}P</span>
       </div>
@@ -1142,8 +1145,9 @@ function WalletPage({ walletPoints, chargePoints }: { walletPoints: number; char
         ))}
       </div>
       <div className="callout warning-callout">
-        <b>NICEPAY 연동 준비</b>
-        <p>현재 버튼은 화면 검토용 미리보기입니다. 운영에서는 NICEPAY 결제 승인 콜백을 서버에서 검증한 뒤에만 포인트를 충전하고, 포인트는 현금 환전·양도·개인 간 전달 없이 사이트 내 디지털 상품 구매에만 사용해야 합니다.</p>
+        <b>리틀리 결제 연결</b>
+        <p>결제 버튼을 누르면 리틀리 결제 페이지로 이동합니다. 결제 완료 후 주문번호를 보관해 주세요. 자동 주문·포인트 반영은 리틀리의 API 또는 webhook 발급 후 서버 검증을 추가해야 합니다.</p>
+        <a className="ghost-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리 결제 페이지 열기</a>
       </div>
     </section>
   );
