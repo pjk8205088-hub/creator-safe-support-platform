@@ -1158,6 +1158,10 @@ function AuthPage({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [creatorBio, setCreatorBio] = useState('');
+  const [creatorPhotos, setCreatorPhotos] = useState('');
+  const [instagramVideoUrl, setInstagramVideoUrl] = useState('');
+  const [payoutAccount, setPayoutAccount] = useState('');
   const [role, setRole] = useState<'FAN' | 'CREATOR'>(signupRole || 'CREATOR');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1197,7 +1201,15 @@ function AuthPage({
 
     if (API) {
       const path = '/api/auth/signup';
-      const payload = { name, email, password, role };
+      const payload = {
+        name, email, password, role,
+        ...(role === 'CREATOR' ? {
+          bio: creatorBio,
+          photoUrls: creatorPhotos.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean).slice(0, 10),
+          instagramVideoUrl: instagramVideoUrl.trim() || undefined,
+          payoutAccount: payoutAccount.trim() || undefined
+        } : {})
+      };
       const response = await fetch(`${API}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1265,6 +1277,13 @@ function AuthPage({
               <button type="button" className={role === 'FAN' ? 'active' : ''} onClick={() => setRole('FAN')}>
                 팬
               </button>
+            </div>}
+            {role === 'CREATOR' && <div className="creator-application-fields">
+              <label>셀럽 자기소개<textarea value={creatorBio} onChange={event => setCreatorBio(event.target.value)} placeholder="팬들에게 보여줄 자기소개를 입력해 주세요." maxLength={500} required /></label>
+              <label>사진 최대 10장 <textarea value={creatorPhotos} onChange={event => setCreatorPhotos(event.target.value)} placeholder="사진 URL을 줄바꿈 또는 쉼표로 구분해 최대 10개 입력" required /></label>
+              <label>인스타그램 동영상 1개 <input type="url" value={instagramVideoUrl} onChange={event => setInstagramVideoUrl(event.target.value)} placeholder="https://www.instagram.com/reel/..." required /></label>
+              <label>정산 계좌번호 <input value={payoutAccount} onChange={event => setPayoutAccount(event.target.value)} placeholder="은행명 / 예금주 / 계좌번호" required /></label>
+              <p className="form-hint">계좌번호는 관리자 정산 화면에서만 확인됩니다.</p>
             </div>}
           </>
         )}
@@ -1346,7 +1365,7 @@ function Admin({
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
   const [dataError, setDataError] = useState('');
-  const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string }>>([]);
+  const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }>>([]);
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
@@ -1742,6 +1761,7 @@ function Admin({
               </button>
             </div>
             <CreatorSignupTable creators={mergedCreators} />
+            <CreatorApplicationTable applications={members.filter(member => member.role === 'CREATOR' && member.application)} />
           </section>
           )}
 
@@ -2008,6 +2028,11 @@ function DmLogTable({
       </table>
     </div>
   );
+}
+
+function CreatorApplicationTable({ applications }: { applications: Array<{ email: string; displayName: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }> }) {
+  if (!applications.length) return <div className="empty-state">상세 프로필 신청서가 아직 없습니다.</div>;
+  return <div className="table-scroll"><table className="admin-table"><thead><tr><th>셀럽</th><th>자기소개</th><th>사진</th><th>인스타그램 동영상</th><th>정산 계좌</th></tr></thead><tbody>{applications.map(item => <tr key={item.email}><td><b>{item.displayName}</b><small>{item.email}</small></td><td>{item.application?.bio || '-'}</td><td>{item.application?.photoUrls.length || 0} / 10장</td><td>{item.application?.instagramVideoUrl ? <a href={item.application.instagramVideoUrl} target="_blank" rel="noreferrer">열기</a> : '-'}</td><td>{item.application?.payoutAccount || '-'}</td></tr>)}</tbody></table></div>;
 }
 
 function CreatorSignupTable({

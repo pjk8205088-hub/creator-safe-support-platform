@@ -431,7 +431,11 @@ const AuthSchema = z.object({
 const SignupSchema = AuthSchema.extend({
   name: z.string().min(2).max(30),
   role: z.enum(['FAN', 'CREATOR']).default('FAN'),
-  creatorSlug: z.string().min(2).max(30).optional()
+  creatorSlug: z.string().min(2).max(30).optional(),
+  bio: z.string().max(500).optional(),
+  photoUrls: z.array(z.string().url()).max(10).optional(),
+  instagramVideoUrl: z.string().url().optional(),
+  payoutAccount: z.string().max(120).optional()
 });
 
 function publicUser(user: User) {
@@ -585,17 +589,24 @@ app.post('/api/auth/signup', async (req, res) => {
                   slug: requestedSlug || `creator-${nanoid(5)}`,
                   displayName: input.name,
                   handle: `@${requestedSlug || input.name}`,
-                  bio: '인플러언서 코리아 크리에이터입니다.',
+                  bio: input.bio || '인플러언서 코리아 크리에이터입니다.',
                   category: 'creator',
                   platform: 'Instagram',
-                  avatarUrl: '/influencers/trendy-influencers-wall.png',
-                  coverUrl: '/influencers/trendy-influencers-wall.png'
+                  avatarUrl: input.photoUrls?.[0] || '/influencers/trendy-influencers-wall.png',
+                  coverUrl: input.photoUrls?.[0] || '/influencers/trendy-influencers-wall.png'
                 }
               }
             }
           : {})
       }
     });
+    if (input.role === 'CREATOR') {
+      await prisma!.adminSetting.upsert({
+        where: { key: `creatorApplication:${user.id}` },
+        update: { value: JSON.stringify({ bio: input.bio || '', photoUrls: input.photoUrls || [], instagramVideoUrl: input.instagramVideoUrl || '', payoutAccount: input.payoutAccount || '' }) },
+        create: { key: `creatorApplication:${user.id}`, value: JSON.stringify({ bio: input.bio || '', photoUrls: input.photoUrls || [], instagramVideoUrl: input.instagramVideoUrl || '', payoutAccount: input.payoutAccount || '' }) }
+      });
+    }
     return res.status(201).json(await issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() }));
   }
   if (users.some(user => user.email === email)) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
@@ -883,12 +894,18 @@ app.get('/api/admin/users', async (_req, res) => {
   if (!dbReady()) return res.json(users.map(publicUser));
   await seedDatabase();
   const rows = await prisma!.user.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
-  res.json(rows.map((user: any) => ({ id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, createdAt: user.createdAt })));
+  const usersWithApplications = await Promise.all(rows.map(async (user: any) => {
+    const application = user.role === 'CREATOR'
+      ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } })
+      : null;
+    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, application: application ? JSON.parse(application.value) : undefined, createdAt: user.createdAt };
+  }));
+  res.json(usersWithApplications);
 });
 app.get('/api/admin/creators', async (_req, res) => {
   if (!dbReady()) return res.json(creators);
   await seedDatabase();
-  const rows = await prisma!.creatorProfile.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  const rows = await prisma!.creatorProfile.findMany({ include: { user: true }, orderBy: { createdAt: 'desc' }, take: 200 });
   res.json(rows);
 });
 app.get('/api/admin/payments', async (_req, res) => {

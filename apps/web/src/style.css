@@ -436,6 +436,9 @@ table {
 .join-band { display: flex; justify-content: space-between; align-items: end; gap: 24px; width: min(1180px, calc(100vw - 36px)); margin: 0 auto; padding: 90px 0; }
 .join-band h2 { margin: 10px 0 0; font-size: clamp(42px, 6vw, 84px); line-height: .95; letter-spacing: -.04em; }
 .join-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.creator-application-fields { display: grid; gap: 12px; padding: 14px 0; }
+.creator-application-fields textarea { min-height: 82px; resize: vertical; }
+.form-hint { margin: 0; color: #7d7187; font-size: 12px; }
 @media (max-width: 760px) {
   .throne-hero { min-height: 700px; background-position: 62% center; }
   .throne-hero::after { width: 220px; height: 220px; right: -50px; top: 14%; }
