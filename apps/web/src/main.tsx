@@ -139,8 +139,8 @@ const supportKey = 'cssp-demo-supports';
 const walletKey = 'cssp-demo-point-wallet';
 
 const businessInfo = {
-  shopName: '인플러언서 코리아',
-  serviceName: '인플러언서 코리아',
+  shopName: 'EON Korea',
+  serviceName: 'EON Korea',
   representative: '황성필',
   businessNumber: '168-06-03440',
   address: '전북특별자치도 부안군 줄포면 부안로 911-16',
@@ -641,7 +641,7 @@ function Home({
             CREATOR COMMUNITY · SEOUL
           </span>
           <h1>좋아하는 셀럽과<br /><em>더 가까이.</em></h1>
-          <p>인플러언서 코리아에서 팬과 크리에이터가 안전하게 만나고, 메시지와 특별한 순간을 나눕니다.</p>
+          <p>EON Korea에서 팬과 크리에이터가 안전하게 만나고, 메시지와 특별한 순간을 나눕니다.</p>
           <div className="hero-actions">
             <SearchBox value={query} onChange={setQuery} />
             <a className="solid-button large hero-primary" href={session ? '#dashboard' : '#fan-signup'}>
@@ -727,7 +727,7 @@ function MvpSpecSection() {
       <div className="section-head">
         <div>
           <span className="kicker">Service Blueprint</span>
-          <h2>인플러언서 코리아 기능 명세</h2>
+          <h2>EON Korea 기능 명세</h2>
           <p>
             MVP는 포인트 충전, 소통형 상품 제공, 크리에이터 대시보드, DM 커뮤니티를 우선순위로 구성합니다.
           </p>
@@ -1518,7 +1518,7 @@ function Admin({
         <div className="admin-brand">
           <span>IK</span>
           <div>
-            <b>인플러언서 코리아</b>
+            <b>EON Korea</b>
             <small>AdminLTE 4.8.5-style</small>
           </div>
         </div>
@@ -2228,7 +2228,7 @@ function PolicyPage() {
         <article>
           <h2>이용약관</h2>
           <p>
-            인플러언서 코리아는 포인트 충전으로 디지털 콘텐츠, 프리미엄 DM 이용권, 기간형 멤버십 패스를 구매하는 서비스입니다. 이용자는 표시된
+            EON Korea는 팬과 크리에이터의 안전한 소통을 위한 커뮤니티 서비스입니다. 이용자는 표시된
             충전 패키지와 디지털 상품의 가격, 제공 내용, 이용 기간을 확인한 뒤 결제하며, 결제 완료 후 내역은 대시보드와 고객센터를 통해 확인할 수 있습니다.
           </p>
           <p>

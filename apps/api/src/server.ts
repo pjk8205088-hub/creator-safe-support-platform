@@ -589,7 +589,7 @@ app.post('/api/auth/signup', async (req, res) => {
                   slug: requestedSlug || `creator-${nanoid(5)}`,
                   displayName: input.name,
                   handle: `@${requestedSlug || input.name}`,
-                  bio: input.bio || '인플러언서 코리아 크리에이터입니다.',
+                  bio: input.bio || 'EON Korea 크리에이터입니다.',
                   category: 'creator',
                   platform: 'Instagram',
                   avatarUrl: input.photoUrls?.[0] || '/influencers/trendy-influencers-wall.png',
