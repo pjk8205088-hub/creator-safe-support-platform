@@ -1276,7 +1276,7 @@ function AuthPage({
         {isAdminLogin ? (
           <p className="auth-copy">승인된 관리자 계정으로 로그인해 주세요.</p>
         ) : null}
-        {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
+        {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><button type="button" className={loginAs === 'CREATOR' ? 'active' : ''} onClick={() => setLoginAs('CREATOR')}>인플루언서 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
         <div className="social-row">
           {['Kakao', 'Naver', 'Instagram'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
