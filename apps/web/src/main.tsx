@@ -337,6 +337,28 @@ const demoCreators: Creator[] = [
   }
 ];
 
+const creatorArtwork: Record<string, string> = {
+  'kang-su-a': '/influencers/eon8-creator-luna.png',
+  'moon-ha-rin': '/influencers/eon8-creator-luna.png',
+  'han-areum': '/influencers/eon8-creator-arin.png',
+  'lee-ji-yun': '/influencers/eon8-creator-neo.png',
+  'kim-do-jin': '/influencers/eon8-creator-jun.png'
+};
+
+function withCreatorArtwork(creator: Creator): Creator {
+  const artwork = creatorArtwork[creator.slug] || '/influencers/eon8-creator-studio.png';
+  const hasLocalArtwork = creator.avatarUrl?.startsWith('/influencers/eon8-creator-');
+  return {
+    ...creator,
+    avatarUrl: hasLocalArtwork ? creator.avatarUrl : artwork,
+    coverUrl: creator.coverUrl?.startsWith('/influencers/eon8-creator-') ? creator.coverUrl : artwork,
+    wishlist: (creator.wishlist || []).map(item => ({
+      ...item,
+      imageUrl: item.imageUrl?.startsWith('/influencers/eon8-creator-') ? item.imageUrl : artwork
+    }))
+  };
+}
+
 function readStoredSupports() {
   try {
     return JSON.parse(localStorage.getItem(supportKey) || '[]') as Support[];
@@ -415,7 +437,7 @@ export function App() {
       getJson<Support[]>('/api/supports', [])
     ]);
     setCategories(categoryData);
-    setCreators(creatorData);
+    setCreators(creatorData.map(withCreatorArtwork));
     setSupports(supportData);
   };
 
@@ -435,7 +457,7 @@ export function App() {
       return;
     }
     const slug = page.split('/')[1];
-    getJson<Creator | null>(`/api/creators/${slug}`, demoCreators.find(creator => creator.slug === slug) ?? null).then(setSelected);
+    getJson<Creator | null>(`/api/creators/${slug}`, demoCreators.find(creator => creator.slug === slug) ?? null).then(creator => setSelected(creator ? withCreatorArtwork(creator) : null));
   }, [page]);
 
   useEffect(() => {
