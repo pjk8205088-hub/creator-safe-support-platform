@@ -649,18 +649,6 @@ function Home({
           </span>
           <h1>좋아하는 셀럽과<br /><em>더 가까이.</em></h1>
           <p>EON Korea에서 팬과 크리에이터가 안전하게 만나고, 메시지와 특별한 순간을 나눕니다.</p>
-          <div className="hero-actions">
-            <SearchBox value={query} onChange={setQuery} />
-            <a className="solid-button large hero-primary" href={session ? '#dashboard' : '#fan-signup'}>
-              {session ? '내 커뮤니티' : '팬으로 시작하기'}
-              <ArrowRight size={18} />
-            </a>
-            <a className="ghost-button large hero-secondary" href="#login">
-              로그인
-              <LogIn size={18} />
-            </a>
-            <a className="ghost-button large hero-secondary" href="#creator-signup">크리에이터로 참여하기</a>
-          </div>
         </div>
         <div className="hero-note"><span>01</span><b>Private by design</b><span>팬과 셀럽의 안전한 소통</span></div>
       </section>
