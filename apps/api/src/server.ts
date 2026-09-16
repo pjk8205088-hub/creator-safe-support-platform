@@ -284,6 +284,9 @@ const users: User[] = [
 const sessions = new Map<string, string>();
 const supports: any[] = [];
 const notifications: any[] = [];
+const paymentEmailEvents: Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }> = [];
+const payoutAgreements: Array<{ creatorId: string; amount: number; note: string; updatedAt: string }> = [];
+const payoutRequests: Array<{ id: string; creatorId: string; amount: number; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID'; createdAt: string; processedAt?: string }> = [];
 const paymentOrders: PaymentOrder[] = [];
 const adminCommissionRate = Number(process.env.ADMIN_COMMISSION_RATE ?? 25);
 const dbReady = () => prisma !== null;
@@ -482,6 +485,72 @@ app.use('/api/admin', async (req, res, next) => {
     if (user.role !== 'ADMIN') return res.status(403).json({ code: 'FORBIDDEN' });
     next();
   } catch { res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' }); }
+});
+
+const LittlyPaymentEmailSchema = z.object({
+  subject: z.string().max(300).optional().default(''),
+  from: z.string().max(300).optional().default(''),
+  text: z.string().max(20000),
+  receivedAt: z.string().datetime().optional()
+});
+
+// Littly does not expose a public payment webhook. Make/Zapier can forward
+// the seller notification email here without exposing mailbox credentials.
+app.post('/api/integrations/littly/payment-email', async (req, res) => {
+  const secret = process.env.LITTLY_INBOUND_EMAIL_SECRET;
+  if (!secret || req.header('x-littly-inbound-secret') !== secret) {
+    return res.status(401).json({ code: 'INVALID_INBOUND_SECRET' });
+  }
+  const parsed = LittlyPaymentEmailSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_EMAIL_PAYLOAD' });
+  const id = `littly-email-${nanoid(14)}`;
+  const record = { id, ...parsed.data, receivedAt: parsed.data.receivedAt || new Date().toISOString(), status: 'RECEIVED' };
+  if (dbReady()) {
+    await prisma!.adminSetting.create({ data: { key: `littlyPaymentEmail:${id}`, value: JSON.stringify(record) } });
+  } else {
+    paymentEmailEvents.unshift(record);
+  }
+  res.status(202).json({ id, status: 'RECEIVED' });
+});
+
+const PayoutRequestSchema = z.object({ amount: z.number().int().positive(), note: z.string().max(300).optional().default('') });
+const PayoutAgreementSchema = z.object({ creatorId: z.string().min(1), amount: z.number().int().nonnegative(), note: z.string().max(300).optional().default('') });
+const payoutKey = (creatorId: string) => `payoutAgreement:${creatorId}`;
+const payoutRequestKey = (id: string) => `payoutRequest:${id}`;
+async function getPayoutAgreement(creatorId: string) {
+  if (dbReady()) {
+    const row = await prisma!.adminSetting.findUnique({ where: { key: payoutKey(creatorId) } });
+    return row ? JSON.parse(row.value) : { creatorId, amount: 0, note: '', updatedAt: null };
+  }
+  return payoutAgreements.find(item => item.creatorId === creatorId) || { creatorId, amount: 0, note: '', updatedAt: null };
+}
+async function getPayoutRequestList() {
+  if (dbReady()) {
+    const rows = await prisma!.adminSetting.findMany({ where: { key: { startsWith: 'payoutRequest:' } }, orderBy: { updatedAt: 'desc' }, take: 300 });
+    return rows.map(row => JSON.parse(row.value));
+  }
+  return payoutRequests;
+}
+app.get('/api/payouts/me', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const agreement = await getPayoutAgreement(user.id);
+  const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id);
+  res.json({ agreement, requests });
+});
+app.post('/api/payouts/requests', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = PayoutRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_PAYOUT_REQUEST' });
+  const agreement = await getPayoutAgreement(user.id);
+  const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id && ['PENDING', 'APPROVED'].includes(item.status));
+  const committed = requests.reduce((sum, item) => sum + item.amount, 0);
+  if (parsed.data.amount + committed > agreement.amount) return res.status(409).json({ code: 'AGREEMENT_AMOUNT_EXCEEDED', available: Math.max(0, agreement.amount - committed) });
+  const record = { id: `payout-${nanoid(12)}`, creatorId: user.id, ...parsed.data, status: 'PENDING' as const, createdAt: new Date().toISOString() };
+  if (dbReady()) await prisma!.adminSetting.create({ data: { key: payoutRequestKey(record.id), value: JSON.stringify(record) } });
+  else payoutRequests.unshift(record);
+  res.status(201).json(record);
 });
 
 installNicepay(app, { prisma, getUser: getUserFromRequest, getRate: getCommissionRate });
@@ -912,6 +981,34 @@ app.get('/api/admin/payments', async (_req, res) => {
   if (!dbReady()) return res.json(paymentOrders);
   const rows = await prisma!.digitalOrder.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 300 });
   res.json(rows.map(dbOrderToSupport));
+});
+app.get('/api/admin/integrations/littly/payment-emails', async (_req, res) => {
+  if (!dbReady()) return res.json(paymentEmailEvents);
+  const rows = await prisma!.adminSetting.findMany({ where: { key: { startsWith: 'littlyPaymentEmail:' } }, orderBy: { updatedAt: 'desc' }, take: 300 });
+  res.json(rows.map(row => JSON.parse(row.value)));
+});
+app.get('/api/admin/payout-requests', async (_req, res) => res.json(await getPayoutRequestList()));
+app.post('/api/admin/payout-agreements', async (req, res) => {
+  const parsed = PayoutAgreementSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_PAYOUT_AGREEMENT' });
+  const record = { ...parsed.data, updatedAt: new Date().toISOString() };
+  if (dbReady()) await prisma!.adminSetting.upsert({ where: { key: payoutKey(record.creatorId) }, update: { value: JSON.stringify(record) }, create: { key: payoutKey(record.creatorId), value: JSON.stringify(record) } });
+  else {
+    const index = payoutAgreements.findIndex(item => item.creatorId === record.creatorId);
+    if (index >= 0) payoutAgreements[index] = record; else payoutAgreements.unshift(record);
+  }
+  res.json(record);
+});
+app.post('/api/admin/payout-requests/:id/status', async (req, res) => {
+  const status = z.enum(['APPROVED', 'REJECTED', 'PAID']).safeParse(req.body?.status);
+  if (!status.success) return res.status(400).json({ code: 'INVALID_PAYOUT_STATUS' });
+  const id = req.params.id;
+  const rows = await getPayoutRequestList();
+  const record = rows.find(item => item.id === id);
+  if (!record) return res.status(404).json({ code: 'PAYOUT_REQUEST_NOT_FOUND' });
+  if (dbReady()) await prisma!.adminSetting.update({ where: { key: payoutRequestKey(id) }, data: { value: JSON.stringify({ ...record, status: status.data, processedAt: new Date().toISOString() }) } });
+  else { const index = payoutRequests.findIndex(item => item.id === id); if (index >= 0) payoutRequests[index] = { ...payoutRequests[index], status: status.data, processedAt: new Date().toISOString() }; }
+  res.json({ ...record, status: status.data });
 });
 app.get('/api/admin/settings', async (_req, res) => res.json({ commissionRate: await getCommissionRate() }));
 app.post('/api/admin/settings', async (req, res) => {

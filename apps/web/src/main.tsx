@@ -134,6 +134,9 @@ type PaymentOrderResponse = {
 const API =
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL : '') ||
   (typeof location !== 'undefined' ? (location.hostname === 'localhost' ? 'http://localhost:4000' : location.origin) : '');
+const LITTLY_CHECKOUT_URL =
+  (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL : '') ||
+  'https://litt.ly/eon8';
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 const walletKey = 'cssp-demo-point-wallet';
@@ -653,6 +656,16 @@ function Home({
         </div>
         <div className="hero-note"><span>01</span><b>Private by design</b><span>팬과 셀럽의 안전한 소통</span></div>
       </section>
+      <section className="trust-metrics">
+        <div><strong>100%</strong><span>주소 비공개 배송</span></div>
+        <div><strong>1:1</strong><span>인스타그램 DM 알림</span></div>
+        <div><strong>K-Pay</strong><span>국내 결제 연동 준비</span></div>
+        <div><strong>∞</strong><span>팬과 크리에이터의 이야기</span></div>
+      </section>
+      <section className="content-band mission-band">
+        <div className="mission-copy"><span className="kicker">Send a little love</span><h2>주소 없이<br /><em>마음을 전하는 법</em></h2><p>좋아하는 사람에게 선물과 응원 메시지를 보내고, 개인정보는 안전하게 지키세요.</p><a className="solid-button large" href="#fan-signup">팬으로 시작하기 <ArrowRight size={18} /></a></div>
+        <div className="mission-cards"><article><ShieldCheck size={25} /><h3>개인정보 보호</h3><p>팬과 크리에이터의 주소와 본명을 직접 공유하지 않는 배송 구조를 준비합니다.</p></article><article><Bell size={25} /><h3>인스타그램 알림</h3><p>선물과 응원 소식이 크리에이터의 연결된 채널에 도착하도록 연동합니다.</p></article><article><HeartHandshake size={25} /><h3>감사와 인증</h3><p>감사 메시지와 스토리 인증으로 선물이 따뜻한 관계로 이어집니다.</p></article></div>
+      </section>
       <section className="content-band creator-showcase">
         <div className="section-head">
           <div>
@@ -664,6 +677,7 @@ function Home({
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
+      <section className="content-band ranking-band"><div className="section-head"><div><span className="kicker">Trending now</span><h2>이번 주 주목받는 크리에이터</h2><p>활동과 팬 참여를 바탕으로 매주 새롭게 발견합니다.</p></div><a className="text-link" href="#categories">랭킹 전체 보기 <ArrowRight size={16} /></a></div><div className="ranking-list">{creators.slice(0, 5).map((creator, index) => <a className="ranking-row" href={`#creator/${creator.slug}`} key={creator.id}><strong>{String(index + 1).padStart(2, '0')}</strong><img src={creator.avatarUrl} alt="" /><span><b>{creator.displayName}</b><small>{creator.handle} · {creator.platform}</small></span><em>{index === 0 ? 'RISING' : index < 3 ? 'POPULAR' : 'NEW'}</em><ArrowRight size={17} /></a>)}</div></section>
       <section className="platform-strip"><span>CREATORS FROM EVERYWHERE</span><b>Instagram</b><b>YouTube</b><b>TikTok</b><b>Twitch</b><b>Live & private</b></section>
       <section className="content-band how-band">
         <div className="section-head"><div><span className="kicker">Simple by design</span><h2>시작은 가볍게,<br />연결은 오래도록.</h2></div></div>
@@ -673,6 +687,7 @@ function Home({
         <div className="community-intro"><span className="kicker">How it feels</span><h2>팬의 하루에<br /><em>좋아하는 사람이</em> 머무는 곳</h2><p>공개 프로필부터 1:1 메시지까지, 관계의 속도는 당신이 정합니다.</p></div>
         <div className="community-features"><article><span>01</span><HeartHandshake size={24} /><h3>나만의 팬 커뮤니티</h3><p>셀럽이 직접 전하는 공지와 이야기를 가장 먼저 만나보세요.</p></article><article><span>02</span><Bell size={24} /><h3>놓치지 않는 알림</h3><p>새 메시지와 라이브 소식을 원하는 채널로 받아보세요.</p></article><article><span>03</span><ShieldCheck size={24} /><h3>안심할 수 있는 프라이버시</h3><p>개인정보와 실제 주소를 보호하는 안전한 소통 환경입니다.</p></article></div>
       </section>
+      <section className="content-band flow-band"><div className="section-head"><div><span className="kicker">How WishSpot works</span><h2>선물부터 감사 인사까지,<br />네 단계로 이어져요.</h2></div></div><div className="flow-grid"><article><span>01</span><h3>선물을 골라요</h3><p>크리에이터의 위시리스트와 프로젝트를 살펴봅니다.</p></article><article><span>02</span><h3>안전하게 결제해요</h3><p>카카오페이, 네이버페이, 토스, 카드 결제 연동을 준비합니다.</p></article><article><span>03</span><h3>알림이 도착해요</h3><p>결제 검증 후 연결된 인스타그램 DM과 알림으로 안내합니다.</p></article><article><span>04</span><h3>감사를 나눠요</h3><p>크리에이터의 답장과 스토리 인증으로 마음을 확인합니다.</p></article></div></section>
       <section className="join-band"><div><span className="kicker">Your people are here</span><h2>당신의 이야기를<br />시작해보세요.</h2></div><div className="join-actions"><a className="solid-button large" href="#fan-signup">팬 가입하기 <ArrowRight size={18} /></a><a className="ghost-button large" href="#creator-signup">셀럽 등록하기</a></div></section>
     </>
   );
@@ -1019,7 +1034,7 @@ function CheckoutPage({
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
           <p>NICEPAY 카드 결제 후 주문 상태를 확인할 수 있습니다. 가맹점 연결이 준비되면 이용 가능합니다.</p>
-          <a className="solid-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리에서 결제하기</a>
+          <a className="solid-button" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">리틀리에서 결제하기</a>
           <p>리틀리 결제 완료 후 주문번호를 관리자에게 전달하면 결제 내역을 확인할 수 있습니다. 리틀리 API/webhook 승인 정보가 등록되면 자동 반영으로 전환할 수 있습니다.</p>
         </div>
       </div>
@@ -1066,7 +1081,7 @@ function CheckoutPage({
             <textarea value={draft.message} readOnly />
           </label>
           {error && <p className="form-error">{error}</p>}
-          <a className="solid-button large" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">
+          <a className="solid-button large" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">
             {draft.amount.toLocaleString()}원 리틀리에서 결제하기
           </a>
           <button className="ghost-button large" type="button" onClick={pay} disabled={busy}>
@@ -1108,7 +1123,7 @@ function WalletPage({ walletPoints, chargePoints }: { walletPoints: number; char
       <div className="callout warning-callout">
         <b>리틀리 결제 연결</b>
         <p>결제 버튼을 누르면 리틀리 결제 페이지로 이동합니다. 결제 완료 후 주문번호를 보관해 주세요. 자동 주문·포인트 반영은 리틀리의 API 또는 webhook 발급 후 서버 검증을 추가해야 합니다.</p>
-        <a className="ghost-button" href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">리틀리 결제 페이지 열기</a>
+        <a className="ghost-button" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">리틀리 결제 페이지 열기</a>
       </div>
     </section>
   );
@@ -1343,8 +1358,28 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
       <PaymentTable supports={supports} />
+      {session?.user.role === 'CREATOR' && <CreatorPayoutPanel session={session} />}
     </section>
   );
+}
+
+function CreatorPayoutPanel({ session }: { session: Session }) {
+  const [data, setData] = useState<{ agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const load = () => fetch(`${API}/api/payouts/me`, { headers: { Authorization: `Bearer ${session.token}` } }).then(response => response.json()).then(setData).catch(() => setError('정산 정보를 불러오지 못했습니다.'));
+  useEffect(() => { load(); }, [session.token]);
+  async function requestPayout() {
+    setError('');
+    const response = await fetch(`${API}/api/payouts/requests`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ amount: Number(amount), note }) });
+    const result = await response.json();
+    if (!response.ok) return setError(result.code === 'AGREEMENT_AMOUNT_EXCEEDED' ? `신청 가능 금액은 ${Number(result.available || 0).toLocaleString()}원입니다.` : '출금 신청에 실패했습니다.');
+    setAmount(''); setNote(''); load();
+  }
+  const requested = data?.requests.filter(item => ['PENDING', 'APPROVED'].includes(item.status)).reduce((sum, item) => sum + item.amount, 0) || 0;
+  const available = Math.max(0, (data?.agreement.amount || 0) - requested);
+  return <section className="admin-panel payout-panel"><div className="admin-panel-head"><div><span className="kicker">Creator Settlement</span><h2>약정 정산 및 출금 신청</h2></div><span className="admin-badge light">출금 가능 {available.toLocaleString()}원</span></div><p>관리자가 등록한 약정액 기준으로 출금 신청합니다. 실제 송금은 관리자 확인 후 진행됩니다.</p><div className="settings-metrics"><div><span>약정액</span><b>{(data?.agreement.amount || 0).toLocaleString()}원</b></div><div><span>신청 가능액</span><b>{available.toLocaleString()}원</b></div></div><div className="admin-form-grid"><label>출금 신청액<input type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} /></label><label>메모<input value={note} onChange={event => setNote(event.target.value)} placeholder="출금 메모" /></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-button" type="button" disabled={!amount || Number(amount) > available} onClick={requestPayout}>출금 신청</button>{data?.requests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>신청일</th><th>금액</th><th>상태</th></tr></thead><tbody>{data.requests.map(item => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.amount.toLocaleString()}원</td><td>{item.status}</td></tr>)}</tbody></table></div> : null}</section>;
 }
 
 function Admin({
@@ -1365,15 +1400,20 @@ function Admin({
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
   const [dataError, setDataError] = useState('');
+  const [littlyEmails, setLittlyEmails] = useState<Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }>>([]);
+  const [payoutRequests, setPayoutRequests] = useState<Array<{ id: string; creatorId: string; amount: number; status: string; note: string; createdAt: string }>>([]);
+  const [agreementCreatorId, setAgreementCreatorId] = useState('');
+  const [agreementAmount, setAgreementAmount] = useState('');
   const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }>>([]);
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
-    Promise.all(['/api/admin/users', '/api/admin/settings'].map(async path => {
+    Promise.all(['/api/admin/users', '/api/admin/settings', '/api/admin/integrations/littly/payment-emails'].map(async path => {
       const response = await fetch(`${API}${path}`, { headers });
       if (!response.ok) throw new Error('관리자 데이터를 불러올 수 없습니다. 다시 로그인해 주세요.');
       return response.json();
-    })).then(([users, settings]) => { setMembers(users); setFeeRate(settings.commissionRate); })
+    })).then(([users, settings, emails]) => { setMembers(users); setFeeRate(settings.commissionRate); setLittlyEmails(emails); return fetch(`${API}/api/admin/payout-requests`, { headers }).then(response => response.json()); })
+      .then(requests => setPayoutRequests(requests))
       .catch(error => setDataError(error.message));
   }, []);
   const section = page === 'admin' ? 'dashboard' : page.replace('admin-', '');
@@ -1510,6 +1550,17 @@ function Admin({
       ...prev
     ]);
     setCreatorDraft(prev => ({ ...prev, displayName: '', handle: '' }));
+  }
+
+  async function savePayoutAgreement() {
+    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+    await fetch(`${API}/api/admin/payout-agreements`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ creatorId: agreementCreatorId, amount: Number(agreementAmount) }) });
+    setAgreementAmount('');
+  }
+  async function updatePayoutRequest(id: string, status: 'APPROVED' | 'REJECTED' | 'PAID') {
+    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+    const response = await fetch(`${API}/api/admin/payout-requests/${id}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ status }) });
+    if (response.ok) setPayoutRequests(prev => prev.map(item => item.id === id ? { ...item, status } : item));
   }
 
   return (
@@ -1661,6 +1712,19 @@ function Admin({
           </section>
           )}
 
+          {(showDashboard || section === 'payments') && (
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head">
+              <div>
+                <span className="kicker">Littly Integration</span>
+                <h2>리틀리 결제 알림 수신 내역</h2>
+              </div>
+              <span className="admin-badge light">{littlyEmails.length}건 수신</span>
+            </div>
+            {littlyEmails.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>수신일</th><th>제목</th><th>발신자</th><th>내용</th><th>상태</th></tr></thead><tbody>{littlyEmails.slice(0, 20).map(email => <tr key={email.id}><td>{new Date(email.receivedAt).toLocaleString('ko-KR')}</td><td>{email.subject || '-'}</td><td>{email.from || '-'}</td><td><small>{email.text.slice(0, 180)}</small></td><td>{email.status}</td></tr>)}</tbody></table></div> : <div className="empty-state">아직 리틀리 결제 알림이 수신되지 않았습니다.</div>}
+          </section>
+          )}
+
           {showDashboard && (
           <section className="admin-panel">
             <div className="admin-panel-head">
@@ -1766,7 +1830,15 @@ function Admin({
           )}
 
           {(showDashboard || section === 'settlement') && (
-            <section className="admin-panel admin-panel-wide">
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head"><div><span className="kicker">약정 정산</span><h2>인플루언서 약정액 및 출금 신청</h2></div><span className="admin-badge light">수동 지급 관리</span></div>
+            <div className="admin-form-grid"><label>인플루언서<select value={agreementCreatorId} onChange={event => setAgreementCreatorId(event.target.value)}><option value="">선택하세요</option>{creators.map(creator => <option key={creator.id} value={creator.id}>{creator.displayName} ({creator.handle})</option>)}</select></label><label>약정 지급액<input type="number" min="0" value={agreementAmount} onChange={event => setAgreementAmount(event.target.value)} placeholder="원" /></label><button className="solid-button" type="button" disabled={!agreementCreatorId || !agreementAmount} onClick={savePayoutAgreement}>약정액 저장</button></div>
+            {payoutRequests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>인플루언서</th><th>신청액</th><th>신청일</th><th>상태</th><th>처리</th></tr></thead><tbody>{payoutRequests.map(item => <tr key={item.id}><td>{creators.find(creator => creator.id === item.creatorId)?.displayName || item.creatorId}</td><td>{item.amount.toLocaleString()}원</td><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.status}</td><td>{item.status === 'PENDING' ? <><button type="button" onClick={() => updatePayoutRequest(item.id, 'APPROVED')}>승인</button> <button type="button" onClick={() => updatePayoutRequest(item.id, 'REJECTED')}>반려</button></> : item.status === 'APPROVED' ? <button type="button" onClick={() => updatePayoutRequest(item.id, 'PAID')}>지급 완료</button> : '-'}</td></tr>)}</tbody></table></div> : <div className="empty-state">출금 신청이 없습니다.</div>}
+          </section>
+          )}
+
+          {(showDashboard || section === 'settlement') && (
+          <section className="admin-panel admin-panel-wide">
               <div className="admin-panel-head">
                 <div>
                   <span className="kicker">정산 현황</span>
