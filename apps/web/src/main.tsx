@@ -612,6 +612,12 @@ function Nav() {
         <a href="#fan-signup">팬 가입</a>
         <a href="#business">안전 안내</a>
       </div>
+      <div className="nav-actions">
+        <a className="ghost-button" href="#login">
+          <LogIn size={17} />
+          로그인
+        </a>
+      </div>
     </nav>
   );
 }
