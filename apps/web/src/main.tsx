@@ -209,8 +209,8 @@ const demoCreators: Creator[] = [
     bio: '맑고 깨끗한 아름다움을 좋아하는 수아입니다. 자연스러운 데일리룩과 뷰티 팁을 나눠요.',
     categoryId: 'digital-content',
     platform: 'Instagram',
-    avatarUrl: '/influencers/kang-su-a.png',
-    coverUrl: '/influencers/kang-su-a-summer-resort-v1.png',
+    avatarUrl: '/influencers/eon8-creator-luna.png',
+    coverUrl: '/influencers/eon8-creator-luna.png',
     addressMasked: '센터 중계 주소로 실제 배송지 비공개',
     wishlist: [
       {
@@ -218,7 +218,7 @@ const demoCreators: Creator[] = [
         title: '강수아 여름 리조트 에디션',
         price: 29000,
         categoryId: 'digital-content',
-        imageUrl: '/influencers/kang-su-a-summer-resort-v1.png',
+        imageUrl: '/influencers/eon8-creator-luna.png',
         note: '여름 리조트에서 촬영한 만화형 포토 다이어리와 비하인드 콘텐츠입니다.'
       },
       {
@@ -226,7 +226,7 @@ const demoCreators: Creator[] = [
         title: '수아 뷰티 루틴 DM 이용권',
         price: 12000,
         categoryId: 'dm',
-        imageUrl: '/influencers/kang-su-a.png',
+        imageUrl: '/influencers/eon8-creator-luna.png',
         note: '구매 후 수아에게 메시지를 보내고 뷰티 루틴 이야기를 나눌 수 있습니다.'
       }
     ]
@@ -239,8 +239,8 @@ const demoCreators: Creator[] = [
     bio: '도심의 네온사인처럼 빛나는 도진입니다. 힙합 스트릿 패션과 에너지를 나눠요.',
     categoryId: 'dm',
     platform: 'YouTube',
-    avatarUrl: '/influencers/kim-do-jin.png',
-    coverUrl: '/influencers/kim-do-jin.png',
+    avatarUrl: '/influencers/eon8-creator-jun.png',
+    coverUrl: '/influencers/eon8-creator-jun.png',
     addressMasked: '가상 주소/센터 중계 사용',
     wishlist: [
       {
@@ -248,7 +248,7 @@ const demoCreators: Creator[] = [
         title: '도진 스트릿 에디션',
         price: 30000,
         categoryId: 'dm',
-        imageUrl: '/influencers/kim-do-jin.png',
+        imageUrl: '/influencers/eon8-creator-jun.png',
         note: '네온 스트릿 무드의 만화형 포토와 도진의 스타일 노트를 제공합니다.'
       },
       {
@@ -256,7 +256,7 @@ const demoCreators: Creator[] = [
         title: '도진 1:1 DM 이용권',
         price: 15000,
         categoryId: 'dm',
-        imageUrl: '/influencers/kim-do-jin.png',
+        imageUrl: '/influencers/eon8-creator-jun.png',
         note: '구매 후 도진에게 메시지를 보내고 스트릿 라이프 이야기를 나눌 수 있습니다.'
       }
     ]
@@ -269,8 +269,8 @@ const demoCreators: Creator[] = [
     bio: '보랏빛 밤을 사랑하는 지윤입니다. 유니크한 룩과 저만의 감성을 여러분과 나누고 싶어요.',
     categoryId: 'membership',
     platform: 'Instagram',
-    avatarUrl: '/influencers/lee-ji-yun.png',
-    coverUrl: '/influencers/lee-ji-yun.png',
+    avatarUrl: '/influencers/eon8-creator-neo.png',
+    coverUrl: '/influencers/eon8-creator-neo.png',
     addressMasked: '주소 마스킹 대시보드 사용',
     wishlist: [
       {
@@ -278,7 +278,7 @@ const demoCreators: Creator[] = [
         title: '지윤 나이트 룩북',
         price: 24000,
         categoryId: 'membership',
-        imageUrl: '/influencers/lee-ji-yun.png',
+        imageUrl: '/influencers/eon8-creator-neo.png',
         note: '도시의 밤을 담은 만화형 룩북과 스타일링 메모를 열람할 수 있습니다.'
       },
       {
@@ -286,7 +286,7 @@ const demoCreators: Creator[] = [
         title: '지윤 멤버십 패스',
         price: 18000,
         categoryId: 'membership',
-        imageUrl: '/influencers/lee-ji-yun.png',
+        imageUrl: '/influencers/eon8-creator-neo.png',
         note: '기간형 멤버십과 전용 콘텐츠, 활동 등급 혜택을 제공합니다.'
       }
     ]
@@ -299,8 +299,8 @@ const demoCreators: Creator[] = [
     bio: '매일의 순간을 한 장면처럼 기록합니다. 여행과 패션, 기분 좋은 이야기를 전해요.',
     categoryId: 'digital-content',
     platform: 'Instagram',
-    avatarUrl: '/influencers/han-areum-v1.png',
-    coverUrl: '/influencers/han-areum-v1.png',
+    avatarUrl: '/influencers/eon8-creator-arin.png',
+    coverUrl: '/influencers/eon8-creator-arin.png',
     addressMasked: '센터 중계 주소로 실제 배송지 비공개',
     wishlist: [
       {
@@ -308,7 +308,7 @@ const demoCreators: Creator[] = [
         title: '아름 프레임 포토 에디션',
         price: 16000,
         categoryId: 'digital-content',
-        imageUrl: '/influencers/han-areum-v1.png',
+        imageUrl: '/influencers/eon8-creator-arin.png',
         note: '아름의 시선으로 담아낸 여행과 일상 만화형 포토 에디션입니다.'
       }
     ]
@@ -321,8 +321,8 @@ const demoCreators: Creator[] = [
     bio: '비 오는 날의 책방처럼 차분하고 따뜻한 이야기를 전하는 라이프스타일 크리에이터입니다.',
     categoryId: 'kakao-alert',
     platform: 'Instagram',
-    avatarUrl: '/influencers/moon-ha-rin-v1.png',
-    coverUrl: '/influencers/moon-ha-rin-v1.png',
+    avatarUrl: '/influencers/eon8-creator-luna.png',
+    coverUrl: '/influencers/eon8-creator-luna.png',
     addressMasked: '주소 마스킹 대시보드 사용',
     wishlist: [
       {
@@ -330,7 +330,7 @@ const demoCreators: Creator[] = [
         title: '하린의 비 오는 날 노트',
         price: 14000,
         categoryId: 'kakao-alert',
-        imageUrl: '/influencers/moon-ha-rin-v1.png',
+        imageUrl: '/influencers/eon8-creator-luna.png',
         note: '하린의 짧은 글과 만화형 일러스트를 담은 디지털 노트입니다.'
       }
     ]
