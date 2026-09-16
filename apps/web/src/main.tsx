@@ -548,6 +548,8 @@ export function App() {
         />
       )}
       {page === 'login' && <AuthPage mode="login" session={session} setSession={setSession} />}
+      {page === 'fan-login' && <AuthPage mode="login" loginRole="FAN" session={session} setSession={setSession} />}
+      {page === 'creator-login' && <AuthPage mode="login" loginRole="CREATOR" session={session} setSession={setSession} />}
       {page === 'signup' && <AuthPage mode="signup" session={session} setSession={setSession} />}
       {page === 'fan-signup' && <AuthPage mode="signup" signupRole="FAN" session={session} setSession={setSession} />}
       {page === 'creator-signup' && <AuthPage mode="signup" signupRole="CREATOR" session={session} setSession={setSession} />}
@@ -1162,11 +1164,13 @@ function ProductNotice() {
 function AuthPage({
   mode,
   signupRole,
+  loginRole,
   session,
   setSession
 }: {
   mode: 'login' | 'signup';
   signupRole?: 'FAN' | 'CREATOR';
+  loginRole?: 'FAN' | 'CREATOR';
   session: Session | null;
   setSession: (session: Session | null) => void;
 }) {
@@ -1178,6 +1182,7 @@ function AuthPage({
   const [instagramVideoUrl, setInstagramVideoUrl] = useState('');
   const [payoutAccount, setPayoutAccount] = useState('');
   const [role, setRole] = useState<'FAN' | 'CREATOR'>(signupRole || 'CREATOR');
+  const [loginAs, setLoginAs] = useState<'ADMIN' | 'FAN' | 'CREATOR'>(loginRole || (location.hash.replace('#', '') === 'admin-login' ? 'ADMIN' : 'FAN'));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
@@ -1196,13 +1201,13 @@ function AuthPage({
         }).catch(() => null);
         if (response?.ok) {
           const nextSession = (await response.json()) as Session;
-          if (isAdminLogin && nextSession.user.role !== 'ADMIN') {
+          if ((isAdminLogin && nextSession.user.role !== 'ADMIN') || (!isAdminLogin && loginAs !== nextSession.user.role)) {
             setBusy(false);
-            setError('관리자 계정만 관리자 페이지에 로그인할 수 있습니다.');
+            setError(isAdminLogin ? '관리자 계정만 관리자 페이지에 로그인할 수 있습니다.' : `${loginAs === 'FAN' ? '팬' : '인플루언서'} 계정으로 로그인해 주세요.`);
             return;
           }
           setSession(nextSession);
-          location.hash = isAdminLogin ? 'admin' : 'dashboard';
+          location.hash = isAdminLogin ? 'admin' : loginAs === 'CREATOR' ? 'dashboard' : 'home';
           return;
         }
         setBusy(false);
@@ -1267,10 +1272,11 @@ function AuthPage({
           <LockKeyhole size={16} />
           {isAdminLogin ? 'Operations Access' : mode === 'login' ? 'Welcome back' : 'Create account'}
         </span>
-        <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? '로그인' : role === 'FAN' ? '팬 가입' : '인플러언서 가입'}</h1>
+        <h1>{isAdminLogin ? '관리자 로그인' : mode === 'login' ? `${loginAs === 'FAN' ? '팬' : '인플러언서'} 로그인` : role === 'FAN' ? '팬 가입' : '인플러언서 가입'}</h1>
         {isAdminLogin ? (
           <p className="auth-copy">승인된 관리자 계정으로 로그인해 주세요.</p>
         ) : null}
+        {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><button type="button" className={loginAs === 'CREATOR' ? 'active' : ''} onClick={() => setLoginAs('CREATOR')}>인플루언서 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
         <div className="social-row">
           {['Kakao', 'Naver', 'Instagram'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
