@@ -649,6 +649,10 @@ function Home({
               {session ? '내 커뮤니티' : '팬으로 시작하기'}
               <ArrowRight size={18} />
             </a>
+            <a className="ghost-button large hero-secondary" href="#login">
+              로그인
+              <LogIn size={18} />
+            </a>
             <a className="ghost-button large hero-secondary" href="#creator-signup">크리에이터로 참여하기</a>
           </div>
         </div>
