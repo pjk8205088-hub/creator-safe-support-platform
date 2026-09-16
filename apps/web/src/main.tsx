@@ -16,7 +16,6 @@ import {
   PanelLeft,
   LockKeyhole,
   LogIn,
-  LogOut,
   ReceiptText,
   Search,
   ShieldCheck,
@@ -529,7 +528,7 @@ export function App() {
 
   return (
     <main>
-      <Nav session={session} onLogout={logout} />
+      <Nav />
       {page === 'home' && (
         <Home
           categories={categories}
@@ -600,7 +599,7 @@ export function App() {
   );
 }
 
-function Nav({ session, onLogout }: { session: Session | null; onLogout: () => void }) {
+function Nav() {
   return (
     <nav className="nav">
       <a className="brand" href="#home">
@@ -612,31 +611,6 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
         <a href="#creator-signup">셀럽 등록</a>
         <a href="#fan-signup">팬 가입</a>
         <a href="#business">안전 안내</a>
-      </div>
-      <div className="nav-actions">
-        <a className="ghost-button" href="https://creator-safe-support-platform.vercel.app/#admin-login">
-          <LockKeyhole size={17} />
-          관리자 모드
-        </a>
-        {session ? (
-          <>
-            <span className="account-chip">{session.user.name}</span>
-            <button className="icon-button" onClick={onLogout} aria-label="로그아웃" title="로그아웃">
-              <LogOut size={18} />
-            </button>
-          </>
-        ) : (
-          <>
-            <a className="ghost-button" href="#login">
-              <LogIn size={17} />
-              로그인
-            </a>
-            <a className="solid-button" href="#signup">
-              <UserPlus size={17} />
-              가입
-            </a>
-          </>
-        )}
       </div>
     </nav>
   );
@@ -1298,7 +1272,7 @@ function AuthPage({
         {isAdminLogin ? (
           <p className="auth-copy">승인된 관리자 계정으로 로그인해 주세요.</p>
         ) : null}
-        {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><button type="button" className={loginAs === 'CREATOR' ? 'active' : ''} onClick={() => setLoginAs('CREATOR')}>인플루언서 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
+        {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
         <div className="social-row">
           {['Kakao', 'Naver', 'Instagram'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
