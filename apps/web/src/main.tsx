@@ -1364,7 +1364,7 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
 }
 
 function CreatorPayoutPanel({ session }: { session: Session }) {
-  const [data, setData] = useState<{ agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
+  const [data, setData] = useState<{ creator: { name: string; email: string; payoutAccount: string }; agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -1402,6 +1402,7 @@ function Admin({
   const [dataError, setDataError] = useState('');
   const [littlyEmails, setLittlyEmails] = useState<Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }>>([]);
   const [payoutRequests, setPayoutRequests] = useState<Array<{ id: string; creatorId: string; amount: number; status: string; note: string; createdAt: string }>>([]);
+  const [payoutAgreements, setPayoutAgreements] = useState<Array<{ creatorId: string; amount: number; note: string; updatedAt: string }>>([]);
   const [agreementCreatorId, setAgreementCreatorId] = useState('');
   const [agreementAmount, setAgreementAmount] = useState('');
   const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }>>([]);
@@ -1412,8 +1413,8 @@ function Admin({
       const response = await fetch(`${API}${path}`, { headers });
       if (!response.ok) throw new Error('관리자 데이터를 불러올 수 없습니다. 다시 로그인해 주세요.');
       return response.json();
-    })).then(([users, settings, emails]) => { setMembers(users); setFeeRate(settings.commissionRate); setLittlyEmails(emails); return fetch(`${API}/api/admin/payout-requests`, { headers }).then(response => response.json()); })
-      .then(requests => setPayoutRequests(requests))
+    })).then(([users, settings, emails]) => { setMembers(users); setFeeRate(settings.commissionRate); setLittlyEmails(emails); return Promise.all([fetch(`${API}/api/admin/payout-requests`, { headers }), fetch(`${API}/api/admin/payout-agreements`, { headers })]); })
+      .then(async ([requestsResponse, agreementsResponse]) => { setPayoutRequests(await requestsResponse.json()); setPayoutAgreements(await agreementsResponse.json()); })
       .catch(error => setDataError(error.message));
   }, []);
   const section = page === 'admin' ? 'dashboard' : page.replace('admin-', '');
@@ -1456,12 +1457,16 @@ function Admin({
         .filter(item => item.creatorId === creator.id)
         .reduce((sum, item) => sum + item.amount, 0);
       return {
-        ...creator,
-        total,
+      ...creator,
+      total,
+        payoutAccount: members.find(member => member.displayName === creator.displayName)?.application?.payoutAccount || '-',
+        agreedAmount: payoutAgreements.find(item => item.creatorId === creator.id)?.amount || 0,
+        commissionRate: feeRate,
+        payoutRate: Math.max(0, 100 - feeRate),
         status: total > 0 ? '활성' : '대기'
       };
     });
-  }, [creators, supports]);
+  }, [creators, supports, members, payoutAgreements, feeRate]);
 
   const fanRows = useMemo(() => {
     const map = new Map<string, { name: string; email: string; total: number; count: number; lastSeen: string }>();
@@ -1501,6 +1506,10 @@ function Admin({
       avatarUrl: creator.avatarUrl,
       platform: creator.platform,
       total: creator.total,
+      payoutAccount: creator.payoutAccount,
+      agreedAmount: creator.agreedAmount,
+      commissionRate: creator.commissionRate,
+      payoutRate: creator.payoutRate,
       status: creator.status
     }))
   ];
@@ -1555,6 +1564,7 @@ function Admin({
   async function savePayoutAgreement() {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     await fetch(`${API}/api/admin/payout-agreements`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ creatorId: agreementCreatorId, amount: Number(agreementAmount) }) });
+    setPayoutAgreements(prev => [...prev.filter(item => item.creatorId !== agreementCreatorId), { creatorId: agreementCreatorId, amount: Number(agreementAmount), note: '', updatedAt: new Date().toISOString() }]);
     setAgreementAmount('');
   }
   async function updatePayoutRequest(id: string, status: 'APPROVED' | 'REJECTED' | 'PAID') {
@@ -1949,7 +1959,7 @@ function FanSignupTable({ fans }: { fans: { name: string; email: string; total: 
 function SettlementTable({
   rows
 }: {
-  rows: { id: string; displayName: string; handle: string; avatarUrl: string; platform: string; total: number; adminFee: number; payout: number; status: string }[];
+  rows: { id: string; displayName: string; handle: string; avatarUrl: string; platform: string; total: number; adminFee: number; payout: number; agreedAmount?: number; commissionRate?: number; payoutRate?: number; payoutAccount?: string; status: string }[];
 }) {
   if (!rows.length) {
     return <div className="empty-state">아직 정산 대상 인플러언서가 없습니다.</div>;
@@ -1960,11 +1970,13 @@ function SettlementTable({
         <thead>
           <tr>
             <th>프로필</th>
-            <th>인플러언서</th>
-            <th>플랫폼</th>
-            <th>총 결제액</th>
-            <th>관리자 수수료</th>
-            <th>수령 예정액</th>
+            <th>인플러언서 / 아이디</th>
+            <th>계좌</th>
+            <th>결제금액</th>
+            <th>고정 수수료율</th>
+            <th>지급 비율</th>
+            <th>약정 지급액</th>
+            <th>지급액</th>
             <th>상태</th>
           </tr>
         </thead>
@@ -1978,9 +1990,11 @@ function SettlementTable({
                 <b>{row.displayName}</b>
                 <small>{row.handle}</small>
               </td>
-              <td>{row.platform}</td>
+              <td>{row.payoutAccount || '-'}</td>
               <td>{row.total.toLocaleString()}원</td>
-              <td>{row.adminFee.toLocaleString()}원</td>
+              <td>{row.commissionRate ?? 0}%</td>
+              <td>{row.payoutRate ?? 0}%</td>
+              <td>{(row.agreedAmount ?? 0).toLocaleString()}원</td>
               <td>{row.payout.toLocaleString()}원</td>
               <td>{row.status}</td>
             </tr>

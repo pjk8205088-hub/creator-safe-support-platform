@@ -536,7 +536,9 @@ app.get('/api/payouts/me', async (req, res) => {
   if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
   const agreement = await getPayoutAgreement(user.id);
   const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id);
-  res.json({ agreement, requests });
+  const application = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }) : null;
+  const payoutAccount = application ? JSON.parse(application.value).payoutAccount || '' : '';
+  res.json({ creator: { name: user.name, email: user.email, payoutAccount }, agreement, requests });
 });
 app.post('/api/payouts/requests', async (req, res) => {
   const user = await getUserFromRequest(req);
@@ -988,6 +990,11 @@ app.get('/api/admin/integrations/littly/payment-emails', async (_req, res) => {
   res.json(rows.map(row => JSON.parse(row.value)));
 });
 app.get('/api/admin/payout-requests', async (_req, res) => res.json(await getPayoutRequestList()));
+app.get('/api/admin/payout-agreements', async (_req, res) => {
+  if (!dbReady()) return res.json(payoutAgreements);
+  const rows = await prisma!.adminSetting.findMany({ where: { key: { startsWith: 'payoutAgreement:' } }, take: 300 });
+  res.json(rows.map(row => JSON.parse(row.value)));
+});
 app.post('/api/admin/payout-agreements', async (req, res) => {
   const parsed = PayoutAgreementSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'INVALID_PAYOUT_AGREEMENT' });
