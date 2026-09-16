@@ -263,6 +263,23 @@ const creators: Creator[] = [
 
 const users: User[] = [
   {
+    id: 'usr_demo_hong-gil-dong',
+    name: '홍길동',
+    email: 'pjk8205088@gmail.com',
+    password: '1111',
+    role: 'FAN',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'usr_demo_hong-gil-sun',
+    name: '홍길순',
+    email: 'pjk820508@naver.com',
+    password: '1111',
+    role: 'CREATOR',
+    creatorSlug: 'hong-gil-sun',
+    createdAt: new Date().toISOString()
+  },
+  {
     id: 'usr_demo_creator',
     name: '하나 스튜디오',
     email: 'hspjjang@naver.com',
@@ -355,6 +372,44 @@ async function seedDatabase() {
     where: { key: 'commissionRate' },
     update: {},
     create: { key: 'commissionRate', value: String(adminCommissionRate) }
+  });
+
+  const creatorEmail = 'pjk820508@naver.com';
+  const creatorPasswordHash = await bcrypt.hash('1111', 12);
+  const creatorUser = await prisma.user.upsert({
+    where: { email: creatorEmail },
+    update: { displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' },
+    create: { email: creatorEmail, displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' }
+  });
+  await prisma.creatorProfile.upsert({
+    where: { slug: 'hong-gil-sun' },
+    update: {
+      userId: creatorUser.id,
+      displayName: '홍길순',
+      handle: '@hong.gilsun',
+      bio: 'EON Korea에서 팬들과 따뜻한 이야기를 나누는 크리에이터입니다.',
+      platform: 'Instagram',
+      avatarUrl: '/influencers/eon8-creator-luna.png',
+      coverUrl: '/influencers/eon8-creator-luna.png',
+      instagramId: 'hong-gil-sun'
+    },
+    create: {
+      userId: creatorUser.id,
+      slug: 'hong-gil-sun',
+      displayName: '홍길순',
+      handle: '@hong.gilsun',
+      bio: 'EON Korea에서 팬들과 따뜻한 이야기를 나누는 크리에이터입니다.',
+      category: 'creator',
+      platform: 'Instagram',
+      avatarUrl: '/influencers/eon8-creator-luna.png',
+      coverUrl: '/influencers/eon8-creator-luna.png',
+      instagramId: 'hong-gil-sun'
+    }
+  });
+  await prisma.user.upsert({
+    where: { email: 'pjk8205088@gmail.com' },
+    update: { displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' },
+    create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' }
   });
   const adminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? '';

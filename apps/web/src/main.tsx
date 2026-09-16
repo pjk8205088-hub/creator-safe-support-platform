@@ -16,6 +16,7 @@ import {
   PanelLeft,
   LockKeyhole,
   LogIn,
+  LogOut,
   ReceiptText,
   Search,
   ShieldCheck,
@@ -528,7 +529,7 @@ export function App() {
 
   return (
     <main>
-      <Nav />
+      <Nav session={session} onLogout={logout} />
       {page === 'home' && (
         <Home
           categories={categories}
@@ -599,7 +600,7 @@ export function App() {
   );
 }
 
-function Nav() {
+function Nav({ session, onLogout }: { session: Session | null; onLogout: () => void }) {
   return (
     <nav className="nav">
       <a className="brand" href="#home">
@@ -613,10 +614,20 @@ function Nav() {
         <a href="#business">안전 안내</a>
       </div>
       <div className="nav-actions">
-        <a className="ghost-button" href="#login">
-          <LogIn size={17} />
-          로그인
-        </a>
+        {session ? (
+          <>
+            <a className="ghost-button" href="#login">로그인</a>
+            <button className="ghost-button" type="button" onClick={onLogout}>
+              <LogOut size={17} />
+              로그아웃
+            </button>
+          </>
+        ) : (
+          <a className="ghost-button" href="#login">
+            <LogIn size={17} />
+            로그인
+          </a>
+        )}
       </div>
     </nav>
   );
