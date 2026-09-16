@@ -933,6 +933,19 @@ function CreatorPage({
         <h1>{creator.displayName}</h1>
         <p>{creator.bio}</p>
       </div>
+      <section className="creator-community-summary" aria-label="후원 및 DM 안내">
+        <div>
+          <span className="kicker">Fan community</span>
+          <h2>후원으로 더 가까운 대화</h2>
+          <p>10,000하트 이상 후원하면 {creator.displayName}에게 카카오 알림 조건이 충족됩니다.</p>
+          <div className="tier-row"><span>팬 등급</span><b>레벨 1 · 0P</b><b>레벨 2 · 10,000P</b><b>레벨 3 · 30,000P</b></div>
+        </div>
+        <div className="community-progress">
+          <span>천만원 번지점프 방송</span>
+          <progress max="10000000" value="0" />
+          <b>0% 달성 · 0원 / 10,000,000원</b>
+        </div>
+      </section>
       <div className="creator-layout">
         <div>
           <div className="section-head compact-head">
@@ -956,6 +969,11 @@ function CreatorPage({
               </article>
             ))}
           </div>
+          <article className="paid-dm-card">
+            <div className="paid-dm-media"><img src={creator.avatarUrl} alt="" /><span>결제 후 공개</span></div>
+            <div><span className="kicker">Paid DM</span><h3>팬 메시지와 사진 열람권</h3><p>결제 전 사진과 메시지는 블러 처리되며, 결제 후 {creator.displayName}에게 응원 메시지를 보낼 수 있습니다.</p></div>
+            <button className="solid-button" type="button" onClick={() => { const item = creator.wishlist.find(entry => entry.categoryId === 'dm') || creator.wishlist[0]; if (item) beginCheckout(item); }}>DM 이용권 결제하기</button>
+          </article>
           <ProductNotice />
         </div>
         <aside className="support-panel">
@@ -2030,6 +2048,7 @@ function CreatorCommunicationPanel({
   const [creatorId, setCreatorId] = useState(creators[0]?.id || '');
   const [notice, setNotice] = useState('새 콘텐츠와 일정이 업데이트되었습니다.');
   const [dmText, setDmText] = useState('');
+  const [snsText, setSnsText] = useState('후원해주신 팬 여러분, 정말 감사합니다!');
   const [threshold, setThreshold] = useState(10000);
   const [rankVisible, setRankVisible] = useState(true);
   const [tiers, setTiers] = useState([
@@ -2053,6 +2072,10 @@ function CreatorCommunicationPanel({
   }
   function sendNotice() { addLog('전체 공지', notice, '발송 대기'); }
   function sendDm() { addLog('유료 DM', dmText, '결제 후 열람'); setDmText(''); }
+  function testSocialPost() {
+    if (!creator || !snsText.trim()) return;
+    addLog('SNS 테스트', `${creator.displayName} 후원 내역 테스트: ${snsText}`, '테스트 완료 · 실제 게시 전송 안 함');
+  }
   function saveSettings() { localStorage.setItem(`cssp-creator-settings-${creator?.id}`, JSON.stringify({ threshold, rankVisible, tiers, campaign })); }
 
   return <div className="communication-studio">
@@ -2067,6 +2090,8 @@ function CreatorCommunicationPanel({
       <button className="ghost-button" type="button" onClick={sendNotice}>전체 팬에게 공지</button>
       <label>팬에게 보낼 유료 DM<textarea value={dmText} onChange={event => setDmText(event.target.value)} placeholder="사진/메시지는 결제 전 블러 상태로 노출" /></label>
       <button className="ghost-button" type="button" onClick={sendDm}>유료 DM 등록</button>
+      <label>SNS 후원 인증 문구<textarea value={snsText} onChange={event => setSnsText(event.target.value)} /></label>
+      <button className="ghost-button" type="button" onClick={testSocialPost}>SNS 자동 게시 테스트</button>
     </div>
     <div className="settings-metrics">
       <div><span>셀럽 누적 팬 활동 금액</span><b>{total.toLocaleString()}원</b></div>
