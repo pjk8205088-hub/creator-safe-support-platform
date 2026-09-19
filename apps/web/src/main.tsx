@@ -1217,11 +1217,14 @@ function AuthPage({
 
     if (mode === 'login') {
       if (API) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 10000);
         const response = await fetch(`${API}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        }).catch(() => null);
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal
+        }).catch(() => null).finally(() => window.clearTimeout(timeout));
         if (response?.ok) {
           const nextSession = (await response.json()) as Session;
           if ((isAdminLogin && nextSession.user.role !== 'ADMIN') || (!isAdminLogin && loginAs !== nextSession.user.role)) {
@@ -1234,7 +1237,7 @@ function AuthPage({
           return;
         }
         setBusy(false);
-        setError('이메일 또는 비밀번호를 확인해 주세요.');
+        setError(response?.status === 401 ? '배포 보호 로그인 또는 관리자 인증 설정을 확인해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.');
         return;
       }
       setBusy(false);
