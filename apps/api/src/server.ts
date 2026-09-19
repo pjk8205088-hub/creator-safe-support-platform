@@ -284,8 +284,7 @@ const users: User[] = [
     name: '하나 스튜디오',
     email: 'hspjjang@naver.com',
     password: '1111',
-    role: 'CREATOR',
-    creatorSlug: 'hana',
+    role: 'ADMIN',
     createdAt: new Date().toISOString()
   },
   {
@@ -411,15 +410,13 @@ async function seedDatabase() {
     update: { displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' },
     create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' }
   });
-  const adminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+  const adminEmail = (process.env.ADMIN_EMAIL ?? 'hspjjang@naver.com').trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD ?? '1111';
   if (adminEmail && adminPassword) {
-    const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
-    if (existingAdmin) return;
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     await prisma.user.upsert({
       where: { email: adminEmail },
-      update: {},
+      update: { displayName: '관리자', passwordHash, role: 'ADMIN' },
       create: { email: adminEmail, passwordHash, role: 'ADMIN', displayName: '관리자' }
     });
   }
