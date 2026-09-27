@@ -12,6 +12,7 @@ import {
   FileText,
   Grid3X3,
   HeartHandshake,
+  Images,
   LayoutDashboard,
   PanelLeft,
   LockKeyhole,
@@ -24,7 +25,8 @@ import {
   Users,
   UserRoundPlus,
   UserPlus,
-  WalletCards
+  WalletCards,
+  X
 } from 'lucide-react';
 
 type Category = {
@@ -57,6 +59,7 @@ type Creator = {
   avatarUrl: string;
   coverUrl: string;
   addressMasked?: string;
+  galleryImages?: string[];
   category?: Category;
   wishlist: WishlistItem[];
 };
@@ -343,16 +346,28 @@ const creatorArtwork: Record<string, string> = {
   'moon-ha-rin': '/influencers/eon8-creator-luna.png',
   'han-areum': '/influencers/eon8-creator-arin.png',
   'lee-ji-yun': '/influencers/eon8-creator-neo.png',
-  'kim-do-jin': '/influencers/eon8-creator-jun.png'
+  'kim-do-jin': '/influencers/eon8-creator-jun.png',
+  '@hong.gilsun': '/influencers/eon8-creator-luna.png'
+};
+
+const creatorGallerySheets: Record<string, string> = {
+  'han-areum': '/influencers/gallery/han-areum.png',
+  'hong-gil-sun': '/influencers/gallery/hong-gil-sun.png',
+  'kang-su-a': '/influencers/gallery/kang-su-a.png',
+  'kim-do-jin': '/influencers/gallery/kim-do-jin.png',
+  'lee-ji-yun': '/influencers/gallery/lee-ji-yun.png',
+  'moon-ha-rin': '/influencers/gallery/moon-ha-rin.png',
+  '@hong.gilsun': '/influencers/gallery/hong-gil-sun.png'
 };
 
 function withCreatorArtwork(creator: Creator): Creator {
-  const artwork = creatorArtwork[creator.slug] || '/influencers/eon8-creator-studio.png';
+  const artwork = creatorArtwork[creator.slug] || creatorArtwork[creator.handle] || '/influencers/eon8-creator-studio.png';
   const hasLocalArtwork = creator.avatarUrl?.startsWith('/influencers/eon8-creator-');
+  const registeredPhoto = creator.galleryImages?.[0];
   return {
     ...creator,
-    avatarUrl: hasLocalArtwork ? creator.avatarUrl : artwork,
-    coverUrl: creator.coverUrl?.startsWith('/influencers/eon8-creator-') ? creator.coverUrl : artwork,
+    avatarUrl: hasLocalArtwork ? creator.avatarUrl : registeredPhoto || artwork,
+    coverUrl: creator.coverUrl?.startsWith('/influencers/eon8-creator-') ? creator.coverUrl : registeredPhoto || artwork,
     wishlist: (creator.wishlist || []).map(item => ({
       ...item,
       imageUrl: item.imageUrl?.startsWith('/influencers/eon8-creator-') ? item.imageUrl : artwork
@@ -938,6 +953,7 @@ function CreatorPage({
           <b>0% 달성 · 0원 / 10,000,000원</b>
         </div>
       </section>
+      <CreatorGallery creator={creator} />
       <div className="creator-layout">
         <div>
           <div className="section-head compact-head">
@@ -986,6 +1002,67 @@ function CreatorPage({
           </a>
         </aside>
       </div>
+    </section>
+  );
+}
+
+function CreatorGallery({ creator }: { creator: Creator }) {
+  const [activePhoto, setActivePhoto] = useState<number | null>(null);
+  const uploads = (creator.galleryImages || []).filter(Boolean).slice(0, 10);
+  const sheet = creatorGallerySheets[creator.slug] || creatorGallerySheets[creator.handle] || creatorGallerySheets['hong-gil-sun'];
+  const photos = [
+    ...uploads.map(src => ({ src, uploaded: true, tile: 0 })),
+    ...Array.from({ length: 10 - uploads.length }, (_, index) => ({
+      src: sheet,
+      uploaded: false,
+      tile: (index + uploads.length) % 10
+    }))
+  ];
+  const galleryStyle = (tile: number) => ({
+    backgroundImage: `url("${sheet}")`,
+    backgroundPosition: `${(tile % 5) * 25}% ${Math.floor(tile / 5) * 100}%`
+  });
+
+  useEffect(() => {
+    if (activePhoto === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActivePhoto(null);
+    };
+    addEventListener('keydown', onKeyDown);
+    return () => removeEventListener('keydown', onKeyDown);
+  }, [activePhoto]);
+
+  return (
+    <section className="creator-gallery" aria-labelledby="creator-gallery-title">
+      <div className="section-head compact-head">
+        <div>
+          <span className="kicker"><Images size={15} /> Creator gallery</span>
+          <h2 id="creator-gallery-title">{creator.displayName}의 갤러리</h2>
+        </div>
+        <span className="account-chip">사진 {photos.length}장</span>
+      </div>
+      <p className="creator-gallery-note">가입 시 등록한 사진을 먼저 보여드리며, 나머지는 프로필용 샘플 일러스트로 채웁니다.</p>
+      <div className="creator-gallery-grid">
+        {photos.map((photo, index) => (
+          <button className="creator-gallery-item" type="button" key={`${photo.src}-${photo.tile}-${index}`} onClick={() => setActivePhoto(index)} aria-label={`${creator.displayName} 사진 ${index + 1} 크게 보기`}>
+            {photo.uploaded
+              ? <img className="creator-gallery-image" src={photo.src} alt={`${creator.displayName} 등록 사진 ${index + 1}`} loading="lazy" />
+              : <span className="creator-gallery-image creator-gallery-sprite" style={galleryStyle(photo.tile)} role="img" aria-label={`${creator.displayName} 샘플 일러스트 ${index + 1}`} />}
+            <span className="creator-gallery-label">{photo.uploaded ? '등록 사진' : '샘플 일러스트'}</span>
+          </button>
+        ))}
+      </div>
+      {activePhoto !== null && (
+        <div className="creator-gallery-lightbox" role="presentation" onClick={() => setActivePhoto(null)}>
+          <section className="creator-gallery-dialog" role="dialog" aria-modal="true" aria-label={`${creator.displayName} 갤러리 사진`} onClick={event => event.stopPropagation()}>
+            <button className="icon-button creator-gallery-close" type="button" onClick={() => setActivePhoto(null)} aria-label="사진 닫기"><X size={20} /></button>
+            {photos[activePhoto].uploaded
+              ? <img className="creator-gallery-large" src={photos[activePhoto].src} alt={`${creator.displayName} 등록 사진 ${activePhoto + 1}`} />
+              : <div className="creator-gallery-large creator-gallery-sprite" style={galleryStyle(photos[activePhoto].tile)} role="img" aria-label={`${creator.displayName} 샘플 일러스트 ${activePhoto + 1}`} />}
+            <p>{activePhoto + 1} / {photos.length} · {photos[activePhoto].uploaded ? '등록 사진' : '샘플 일러스트'}</p>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

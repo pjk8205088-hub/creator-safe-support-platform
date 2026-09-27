@@ -357,7 +357,7 @@ async function getCommissionRate() {
     const rate = Number(setting?.value ?? adminCommissionRate);
     return Math.max(1, Math.min(100, Number.isFinite(rate) ? rate : adminCommissionRate));
 }
-function dbCreatorSummary(creator) {
+function dbCreatorSummary(creator, galleryImages = []) {
     return {
         id: creator.id,
         slug: creator.slug,
@@ -368,6 +368,7 @@ function dbCreatorSummary(creator) {
         platform: creator.platform,
         avatarUrl: creator.avatarUrl,
         coverUrl: creator.coverUrl,
+        galleryImages,
         addressMasked: creator.safeAddressMemo ? maskAddress(creator.safeAddressMemo) : undefined,
         wishlist: (creator.digitalProducts ?? []).map((item) => ({
             id: item.id,
@@ -593,7 +594,23 @@ app.get('/api/creators', async (req, res) => {
             include: { digitalProducts: { where: { isActive: true }, orderBy: { priority: 'desc' } } },
             orderBy: { createdAt: 'desc' }
         });
-        return res.json(dbCreators.map(dbCreatorSummary));
+        const applicationSettings = await prisma.adminSetting.findMany({
+            where: { key: { in: dbCreators.flatMap(creator => creator.userId ? [`creatorApplication:${creator.userId}`] : []) } }
+        });
+        const applications = new Map(applicationSettings.map(setting => [setting.key, setting.value]));
+        return res.json(dbCreators.map(creator => {
+            let galleryImages = [];
+            const application = creator.userId ? applications.get(`creatorApplication:${creator.userId}`) : undefined;
+            try {
+                const parsed = application ? JSON.parse(application) : null;
+                if (Array.isArray(parsed?.photoUrls))
+                    galleryImages = parsed.photoUrls.filter((url) => typeof url === 'string');
+            }
+            catch {
+                galleryImages = [];
+            }
+            return dbCreatorSummary(creator, galleryImages);
+        }));
     }
     const category = String(req.query.category ?? '');
     const filtered = category ? creators.filter(creator => creator.categoryId === category) : creators;
@@ -608,7 +625,19 @@ app.get('/api/creators/:slug', async (req, res) => {
         });
         if (!creator)
             return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
-        return res.json(dbCreatorSummary(creator));
+        let galleryImages = [];
+        if (creator.userId) {
+            const application = await prisma.adminSetting.findUnique({ where: { key: `creatorApplication:${creator.userId}` } });
+            try {
+                const parsed = application ? JSON.parse(application.value) : null;
+                if (Array.isArray(parsed?.photoUrls))
+                    galleryImages = parsed.photoUrls.filter((url) => typeof url === 'string');
+            }
+            catch {
+                galleryImages = [];
+            }
+        }
+        return res.json(dbCreatorSummary(creator, galleryImages));
     }
     const creator = creators.find(item => item.slug === req.params.slug || item.id === req.params.slug);
     if (!creator)
