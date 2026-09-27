@@ -610,13 +610,10 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
       </div>
       <div className="nav-actions">
         {session ? (
-          <>
-            <a className="ghost-button" href="#login">로그인</a>
-            <button className="ghost-button" type="button" onClick={onLogout}>
-              <LogOut size={17} />
-              로그아웃
-            </button>
-          </>
+          <button className="ghost-button" type="button" onClick={onLogout}>
+            <LogOut size={17} />
+            로그아웃
+          </button>
         ) : (
           <a className="ghost-button" href="#login">
             <LogIn size={17} />
