@@ -1436,7 +1436,7 @@ function Admin({
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
-    Promise.all(['/api/admin/users', '/api/admin/settings', '/api/admin/integrations/littly/payment-emails'].map(async path => {
+    Promise.all(['/api/admin/users', '/api/admin/settings', '/api/admin/littly-payment-emails'].map(async path => {
       const response = await fetch(`${API}${path}`, { headers });
       if (!response.ok) throw new Error('관리자 데이터를 불러올 수 없습니다. 다시 로그인해 주세요.');
       return response.json();

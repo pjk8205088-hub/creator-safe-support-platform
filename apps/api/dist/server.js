@@ -974,12 +974,14 @@ app.get('/api/admin/payments', async (_req, res) => {
     const rows = await prisma.digitalOrder.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 300 });
     res.json(rows.map(dbOrderToSupport));
 });
-app.get('/api/admin/integrations/littly/payment-emails', async (_req, res) => {
+const listLittlyPaymentEmails = async (_req, res) => {
     if (!dbReady())
         return res.json(paymentEmailEvents);
     const rows = await prisma.adminSetting.findMany({ where: { key: { startsWith: 'littlyPaymentEmail:' } }, orderBy: { updatedAt: 'desc' }, take: 300 });
     res.json(rows.map(row => JSON.parse(row.value)));
-});
+};
+app.get('/api/admin/littly-payment-emails', listLittlyPaymentEmails);
+app.get('/api/admin/integrations/littly/payment-emails', listLittlyPaymentEmails);
 app.get('/api/admin/payout-requests', async (_req, res) => res.json(await getPayoutRequestList()));
 app.get('/api/admin/payout-agreements', async (_req, res) => {
     if (!dbReady())
