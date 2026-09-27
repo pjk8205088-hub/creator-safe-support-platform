@@ -83,7 +83,7 @@ type Support = PaymentOrder;
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '7mb' }));
 const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
   ? new PrismaClient({
       adapter: new PrismaLibSQL({
@@ -298,6 +298,9 @@ const users: User[] = [
 ];
 
 const sessions = new Map<string, string>();
+const creatorGalleryFallback = new Map<string, string[]>();
+const creatorPhotoFallback = new Map<string, string>();
+const creatorApplicationFallback = new Map<string, string>();
 const supports: any[] = [];
 const notifications: any[] = [];
 const paymentEmailEvents: Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }> = [];
@@ -482,14 +485,45 @@ const AuthSchema = z.object({
   password: z.string().min(4)
 });
 
+const CreatorPhotoSchema = z.string().max(420_000).refine(
+  value => value.startsWith('https://') || /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(value),
+  '지원하지 않는 사진 형식입니다.'
+);
+const creatorPhotoKey = (userId: string, index: number) => `creatorPhoto:${userId}:${index}`;
+const creatorPhotoUrl = (userId: string, index: number) => `/api/creator-media/${encodeURIComponent(userId)}/${index}`;
+const isWebpDataUrl = (value: string) => value.startsWith('data:image/webp;base64,');
+async function saveCreatorPhoto(userId: string, index: number, dataUrl: string) {
+  if (dbReady()) {
+    const key = creatorPhotoKey(userId, index);
+    await prisma!.adminSetting.upsert({ where: { key }, update: { value: dataUrl }, create: { key, value: dataUrl } });
+  } else {
+    creatorPhotoFallback.set(creatorPhotoKey(userId, index), dataUrl);
+  }
+}
+
 const SignupSchema = AuthSchema.extend({
   name: z.string().min(2).max(30),
   role: z.enum(['FAN', 'CREATOR']).default('FAN'),
   creatorSlug: z.string().min(2).max(30).optional(),
   bio: z.string().max(500).optional(),
-  photoUrls: z.array(z.string().url()).max(10).optional(),
+  photoUrls: z.array(CreatorPhotoSchema).max(10).optional(),
   instagramVideoUrl: z.string().url().optional(),
-  payoutAccount: z.string().max(120).optional()
+  payoutAccount: z.string().max(120).optional(),
+  bankName: z.string().trim().max(60).optional(),
+  accountHolder: z.string().trim().max(60).optional(),
+  accountNumber: z.string().trim().max(80).optional(),
+  instagramId: z.string().max(80).optional(),
+  dmAlertThreshold: z.number().int().min(0).max(100000000).optional(),
+  dmNotice: z.string().max(500).optional()
+}).superRefine((input, context) => {
+  if (input.role === 'CREATOR' && !input.photoUrls?.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['photoUrls'], message: '크리에이터는 사진을 1장 이상 등록해야 합니다.' });
+  }
+  if (input.role === 'CREATOR') {
+    for (const field of ['bankName', 'accountHolder', 'accountNumber'] as const) {
+      if (!input[field]?.trim()) context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: '정산 계좌 정보를 모두 입력해 주세요.' });
+    }
+  }
 });
 
 function publicUser(user: User) {
@@ -588,8 +622,9 @@ app.get('/api/payouts/me', async (req, res) => {
   const agreement = await getPayoutAgreement(user.id);
   const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id);
   const application = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }) : null;
-  const payoutAccount = application ? JSON.parse(application.value).payoutAccount || '' : '';
-  res.json({ creator: { name: user.name, email: user.email, payoutAccount }, agreement, requests });
+  let payout: Record<string, string> = {};
+  try { payout = application ? JSON.parse(application.value) : {}; } catch { payout = {}; }
+  res.json({ creator: { name: user.name, email: user.email, bankName: payout.bankName || '', accountHolder: payout.accountHolder || '', accountNumber: payout.accountNumber || '', payoutAccount: payout.payoutAccount || '' }, agreement, requests });
 });
 app.post('/api/payouts/requests', async (req, res) => {
   const user = await getUserFromRequest(req);
@@ -686,6 +721,146 @@ app.get('/api/creators', async (req, res) => {
   res.json(filtered.map(creatorSummary));
 });
 
+app.get('/api/creators/me/photos', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  if (dbReady()) {
+    const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+    if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const row = await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } });
+    try {
+      const photos = row ? JSON.parse(row.value).photoUrls : [];
+      return res.json({ photos: Array.isArray(photos) ? photos : [] });
+    } catch { return res.json({ photos: [] }); }
+  }
+  return res.json({ photos: creatorGalleryFallback.get(user.id) || [] });
+});
+
+app.get('/api/creators/me/application', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  if (!dbReady()) return res.json({ status: 'PENDING', reviewNote: '' });
+  const [creator, row] = await Promise.all([
+    prisma!.creatorProfile.findUnique({ where: { userId: user.id } }),
+    prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } })
+  ]);
+  let application: Record<string, any> = {};
+  try { application = row ? JSON.parse(row.value) : {}; } catch { application = {}; }
+  res.json({ status: application.reviewStatus || (creator?.isActive ? 'APPROVED' : 'PENDING'), reviewNote: application.reviewNote || '' });
+});
+
+const CreatorProfileUpdateSchema = z.object({
+  bio: z.string().trim().min(1).max(500),
+  instagramId: z.string().trim().max(80).optional().default(''),
+  instagramVideoUrl: z.string().trim().url().or(z.literal('')).optional().default(''),
+  dmAlertThreshold: z.number().int().min(0).max(100000000),
+  dmNotice: z.string().trim().max(500).optional().default(''),
+  bankName: z.string().trim().min(1).max(60),
+  accountHolder: z.string().trim().min(1).max(60),
+  accountNumber: z.string().trim().min(1).max(80)
+});
+
+app.get('/api/creators/me/profile', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const row = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }) : null;
+  let application: Record<string, any> = {};
+  try { application = row ? JSON.parse(row.value) : JSON.parse(creatorApplicationFallback.get(user.id) || '{}'); } catch { application = {}; }
+  return res.json({
+    name: user.name,
+    email: user.email,
+    bio: application.bio || '',
+    instagramId: application.instagramId || '',
+    instagramVideoUrl: application.instagramVideoUrl || '',
+    dmAlertThreshold: Number(application.dmAlertThreshold ?? 10000),
+    dmNotice: application.dmNotice || '',
+    bankName: application.bankName || '',
+    accountHolder: application.accountHolder || '',
+    accountNumber: application.accountNumber || '',
+    reviewStatus: application.reviewStatus || 'PENDING',
+    reviewNote: application.reviewNote || ''
+  });
+});
+
+app.put('/api/creators/me/profile', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = CreatorProfileUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_CREATOR_PROFILE', issues: parsed.error.issues });
+  const creator = dbReady() ? await prisma!.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+  if (dbReady() && !creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const key = `creatorApplication:${user.id}`;
+  const row = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key } }) : null;
+  let application: Record<string, unknown> = {};
+  try { application = row ? JSON.parse(row.value) : {}; } catch { application = {}; }
+  const value = JSON.stringify({
+    ...application,
+    ...parsed.data,
+    payoutAccount: [parsed.data.bankName, parsed.data.accountHolder, parsed.data.accountNumber].join(' / ')
+  });
+  if (dbReady()) {
+    await prisma!.adminSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+    await prisma!.creatorProfile.update({ where: { id: creator!.id }, data: { bio: parsed.data.bio, instagramId: parsed.data.instagramId || null } });
+  } else {
+    creatorApplicationFallback.set(user.id, value);
+  }
+  return res.json({ saved: true });
+});
+
+app.post('/api/creators/me/photos', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = z.object({ photos: z.array(z.string().max(420_000).regex(/^data:image\/webp;base64,[A-Za-z0-9+/=]+$/)).min(1).max(10) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_CREATOR_PHOTOS' });
+
+  const current = dbReady()
+    ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }).then(row => {
+        try { const photos = row ? JSON.parse(row.value).photoUrls : []; return Array.isArray(photos) ? photos as string[] : []; } catch { return []; }
+      })
+    : creatorGalleryFallback.get(user.id) || [];
+  if (current.length + parsed.data.photos.length > 10) {
+    return res.status(409).json({ code: 'GALLERY_LIMIT_REACHED', remaining: Math.max(0, 10 - current.length) });
+  }
+  const nextPhotos = [
+    ...current,
+    ...parsed.data.photos.map((_, index) => creatorPhotoUrl(user.id, current.length + index))
+  ];
+  await Promise.all(parsed.data.photos.map((photo, index) => saveCreatorPhoto(user.id, current.length + index, photo)));
+
+  if (dbReady()) {
+    const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+    if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const key = `creatorApplication:${user.id}`;
+    const row = await prisma!.adminSetting.findUnique({ where: { key } });
+    let application: Record<string, unknown> = {};
+    try { application = row ? JSON.parse(row.value) : {}; } catch { application = {}; }
+    const value = JSON.stringify({ ...application, photoUrls: nextPhotos });
+    await prisma!.adminSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+    if (!current.length) await prisma!.creatorProfile.update({ where: { id: creator.id }, data: { avatarUrl: nextPhotos[0], coverUrl: nextPhotos[0] } });
+  } else {
+    creatorGalleryFallback.set(user.id, nextPhotos);
+  }
+  return res.json({ photos: nextPhotos });
+});
+
+app.get('/api/creator-media/:userId/:index', async (req, res) => {
+  const index = Number(req.params.index);
+  if (!Number.isInteger(index) || index < 0 || index > 9) return res.status(404).end();
+  const key = creatorPhotoKey(req.params.userId, index);
+  const row = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key } }) : undefined;
+  const dataUrl = row?.value || creatorPhotoFallback.get(key);
+  if (!dataUrl) return res.status(404).end();
+  const match = /^data:image\/webp;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=300' });
+  return res.send(Buffer.from(match[1], 'base64'));
+});
+
 app.get('/api/creators/:slug', async (req, res) => {
   if (dbReady()) {
     await seedDatabase();
@@ -721,9 +896,14 @@ app.post('/api/auth/signup', async (req, res) => {
     await seedDatabase();
     const exists = await prisma!.user.findUnique({ where: { email } });
     if (exists) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
+    const userId = `usr_${nanoid(12)}`;
+    const photoUrls = input.role === 'CREATOR'
+      ? (input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? creatorPhotoUrl(userId, index) : photo)
+      : [];
     const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const user = await prisma!.user.create({
       data: {
+        id: userId,
         email,
         displayName: input.name,
         passwordHash: await bcrypt.hash(input.password, 12),
@@ -738,8 +918,10 @@ app.post('/api/auth/signup', async (req, res) => {
                   bio: input.bio || 'EON Korea 크리에이터입니다.',
                   category: 'creator',
                   platform: 'Instagram',
-                  avatarUrl: input.photoUrls?.[0] || '/influencers/trendy-influencers-wall.png',
-                  coverUrl: input.photoUrls?.[0] || '/influencers/trendy-influencers-wall.png'
+                  avatarUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
+                  coverUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
+                  instagramId: input.instagramId || null,
+                  isActive: false
                 }
               }
             }
@@ -747,10 +929,18 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     });
     if (input.role === 'CREATOR') {
+      await Promise.all((input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? saveCreatorPhoto(user.id, index, photo) : Promise.resolve()));
+      const applicationValue = JSON.stringify({
+        bio: input.bio || '', photoUrls, instagramVideoUrl: input.instagramVideoUrl || '',
+        bankName: input.bankName || '', accountHolder: input.accountHolder || '', accountNumber: input.accountNumber || '',
+        payoutAccount: [input.bankName, input.accountHolder, input.accountNumber].join(' / '), instagramId: input.instagramId || '',
+        dmAlertThreshold: input.dmAlertThreshold ?? 10000, dmNotice: input.dmNotice || '',
+        reviewStatus: 'PENDING', reviewNote: '', registeredAt: new Date().toISOString()
+      });
       await prisma!.adminSetting.upsert({
         where: { key: `creatorApplication:${user.id}` },
-        update: { value: JSON.stringify({ bio: input.bio || '', photoUrls: input.photoUrls || [], instagramVideoUrl: input.instagramVideoUrl || '', payoutAccount: input.payoutAccount || '' }) },
-        create: { key: `creatorApplication:${user.id}`, value: JSON.stringify({ bio: input.bio || '', photoUrls: input.photoUrls || [], instagramVideoUrl: input.instagramVideoUrl || '', payoutAccount: input.payoutAccount || '' }) }
+        update: { value: applicationValue },
+        create: { key: `creatorApplication:${user.id}`, value: applicationValue }
       });
     }
     return res.status(201).json(await issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() }));
@@ -770,6 +960,14 @@ app.post('/api/auth/signup', async (req, res) => {
   };
 
   users.push(user);
+  if (input.role === 'CREATOR') {
+    const photoUrls = (input.photoUrls || []).map((photo, index) => {
+      if (!isWebpDataUrl(photo)) return photo;
+      creatorPhotoFallback.set(creatorPhotoKey(user.id, index), photo);
+      return creatorPhotoUrl(user.id, index);
+    });
+    creatorGalleryFallback.set(user.id, photoUrls);
+  }
   res.status(201).json(await issueSession(user));
 });
 
@@ -1036,17 +1234,54 @@ app.get('/api/admin/summary', async (_req, res) => {
     pendingSettlements: supports.filter(item => item.status === 'PAID').length
   });
 });
+app.get('/api/fan/orders', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'FAN') return res.status(403).json({ code: 'FAN_ONLY' });
+  if (!dbReady()) return res.json(paymentOrders.filter(order => order.supporterId === user.id));
+  const rows = await prisma!.digitalOrder.findMany({
+    where: { fanId: user.id }, include: { creator: true, product: true }, orderBy: { createdAt: 'desc' }, take: 100
+  });
+  res.json(rows.map((order: any) => ({
+    id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
+    message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
+    status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null
+  })));
+});
 app.get('/api/admin/users', async (_req, res) => {
   if (!dbReady()) return res.json(users.map(publicUser));
   await seedDatabase();
-  const rows = await prisma!.user.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  const rows = await prisma!.user.findMany({ include: { creatorProfile: true }, orderBy: { createdAt: 'desc' }, take: 200 });
   const usersWithApplications = await Promise.all(rows.map(async (user: any) => {
     const application = user.role === 'CREATOR'
       ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } })
       : null;
-    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, application: application ? JSON.parse(application.value) : undefined, createdAt: user.createdAt };
+    let applicationData: Record<string, any> | undefined;
+    try { applicationData = application ? JSON.parse(application.value) : undefined; } catch { applicationData = undefined; }
+    if (applicationData) applicationData.reviewStatus ||= user.creatorProfile?.isActive ? 'APPROVED' : 'PENDING';
+    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, application: applicationData, createdAt: user.createdAt };
   }));
   res.json(usersWithApplications);
+});
+app.post('/api/admin/creator-applications/:userId/review', async (req, res) => {
+  const parsed = z.object({ status: z.enum(['PENDING', 'APPROVED', 'ON_HOLD']), reviewNote: z.string().max(500).optional().default('') }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_REVIEW' });
+  if (!dbReady()) return res.status(503).json({ code: 'REVIEW_STORAGE_UNAVAILABLE' });
+  const user = await prisma!.user.findUnique({ where: { id: req.params.userId } });
+  if (!user || user.role !== 'CREATOR') return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const key = `creatorApplication:${user.id}`;
+  const row = await prisma!.adminSetting.findUnique({ where: { key } });
+  let application: Record<string, unknown> = {};
+  try { application = row ? JSON.parse(row.value) : {}; } catch { return res.status(409).json({ code: 'INVALID_APPLICATION_DATA' }); }
+  const reviewedAt = new Date().toISOString();
+  const value = JSON.stringify({ ...application, reviewStatus: parsed.data.status, reviewNote: parsed.data.reviewNote, reviewedAt });
+  await Promise.all([
+    prisma!.adminSetting.upsert({ where: { key }, update: { value }, create: { key, value } }),
+    prisma!.creatorProfile.update({ where: { id: creator.id }, data: { isActive: parsed.data.status === 'APPROVED' } })
+  ]);
+  res.json({ userId: user.id, status: parsed.data.status, reviewNote: parsed.data.reviewNote, reviewedAt });
 });
 app.get('/api/admin/creators', async (_req, res) => {
   if (!dbReady()) return res.json(creators);

@@ -60,6 +60,7 @@ type Creator = {
   coverUrl: string;
   addressMasked?: string;
   galleryImages?: string[];
+  gallerySheetUrl?: string;
   category?: Category;
   wishlist: WishlistItem[];
 };
@@ -353,6 +354,7 @@ const creatorArtwork: Record<string, string> = {
 const creatorGallerySheets: Record<string, string> = {
   'han-areum': '/influencers/gallery/han-areum.png',
   'hong-gil-sun': '/influencers/gallery/hong-gil-sun.png',
+  'creator-LDkgl': '/influencers/gallery/hong-gil-sun.png',
   'kang-su-a': '/influencers/gallery/kang-su-a.png',
   'kim-do-jin': '/influencers/gallery/kim-do-jin.png',
   'lee-ji-yun': '/influencers/gallery/lee-ji-yun.png',
@@ -360,12 +362,25 @@ const creatorGallerySheets: Record<string, string> = {
   '@hong.gilsun': '/influencers/gallery/hong-gil-sun.png'
 };
 
+const creatorPortraits: Record<string, string> = {
+  'han-areum': '/influencers/portraits/han-areum.png',
+  'hong-gil-sun': '/influencers/portraits/hong-gil-sun.png',
+  'creator-LDkgl': '/influencers/portraits/hong-gil-sun.png',
+  'kang-su-a': '/influencers/portraits/kang-su-a.png',
+  'kim-do-jin': '/influencers/portraits/kim-do-jin.png',
+  'lee-ji-yun': '/influencers/portraits/lee-ji-yun.png',
+  'moon-ha-rin': '/influencers/portraits/moon-ha-rin.png',
+  '@hong.gilsun': '/influencers/portraits/hong-gil-sun.png'
+};
+
 function withCreatorArtwork(creator: Creator): Creator {
   const artwork = creatorArtwork[creator.slug] || creatorArtwork[creator.handle] || '/influencers/eon8-creator-studio.png';
+  const gallerySheetUrl = creatorGallerySheets[creator.slug] || creatorGallerySheets[creator.handle] || creatorGallerySheets['hong-gil-sun'];
   const hasLocalArtwork = creator.avatarUrl?.startsWith('/influencers/eon8-creator-');
   const registeredPhoto = creator.galleryImages?.[0];
   return {
     ...creator,
+    gallerySheetUrl,
     avatarUrl: hasLocalArtwork ? creator.avatarUrl : registeredPhoto || artwork,
     coverUrl: creator.coverUrl?.startsWith('/influencers/eon8-creator-') ? creator.coverUrl : registeredPhoto || artwork,
     wishlist: (creator.wishlist || []).map(item => ({
@@ -373,6 +388,65 @@ function withCreatorArtwork(creator: Creator): Creator {
       imageUrl: item.imageUrl?.startsWith('/influencers/eon8-creator-') ? item.imageUrl : artwork
     }))
   };
+}
+
+function CreatorSheetImage({ creator, className, tile = 0, cropY = '8.5%', alt = '' }: { creator: Creator; className: string; tile?: number; cropY?: string; alt?: string }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const registeredPhoto = creator.galleryImages?.[0];
+  if (registeredPhoto && !imageFailed) {
+    return <img className={className} src={registeredPhoto} alt={alt} onError={() => setImageFailed(true)} />;
+  }
+  const portrait = creatorPortraits[creator.slug] || creatorPortraits[creator.handle] || creatorPortraits['hong-gil-sun'];
+  if (tile === 0) {
+    return <img className={`${className} creator-portrait-image`} src={portrait} alt={alt} />;
+  }
+  return (
+    <span
+      className={`${className} creator-sheet-crop`}
+      role={alt ? 'img' : undefined}
+      aria-label={alt || undefined}
+      style={{
+        backgroundImage: `url("${creator.gallerySheetUrl || creatorGallerySheets['hong-gil-sun']}")`,
+        backgroundPosition: `${(tile % 5) * 25}% ${cropY}`
+      }}
+    />
+  );
+}
+
+function creatorHeroStyle(creator: Creator) {
+  return {
+    backgroundImage: `linear-gradient(90deg, rgba(12,18,32,.72), rgba(12,18,32,.12)), url("${creator.gallerySheetUrl || creatorGallerySheets['hong-gil-sun']}")`,
+    backgroundSize: '100% 100%, 500% auto',
+    backgroundPosition: '0 0, 0% 5%'
+  };
+}
+
+async function optimizeCreatorPhoto(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('이미지 파일만 선택할 수 있습니다.');
+  if (file.size > 15 * 1024 * 1024) throw new Error('사진 파일은 15MB 이하로 선택해 주세요.');
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('사진을 처리하지 못했습니다.');
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  for (let quality = 0.82; quality >= 0.42; quality -= 0.08) {
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality));
+    if (!blob || blob.type !== 'image/webp') throw new Error('이 브라우저에서 사진 압축을 지원하지 않습니다.');
+    if (blob.size <= 300 * 1024) {
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('사진을 읽지 못했습니다.'));
+        reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.'));
+        reader.readAsDataURL(blob);
+      });
+    }
+  }
+  throw new Error('사진 용량을 줄이지 못했습니다. 더 작은 사진을 선택해 주세요.');
 }
 
 function readStoredSupports() {
@@ -513,17 +587,12 @@ export function App() {
 
   function beginCheckout(item: WishlistItem) {
     if (!selected) return;
-    setCheckoutDraft({
-      creatorId: selected.id,
-      creatorName: selected.displayName,
-      creatorHandle: selected.handle,
-      wishlistItemId: item.id,
-      itemTitle: item.title,
-      amount: item.price,
-      message: supportForm.message,
-      supporterName: supportForm.supporterName,
-      paymentProvider: 'NICEPAY'
-    });
+    startCheckout(selected, item, supportForm.message, session?.user.name || supportForm.supporterName);
+  }
+
+  function startCheckout(creator: Creator, item: WishlistItem, message: string, supporterName: string) {
+    setCheckoutDraft({ creatorId: creator.id, creatorName: creator.displayName, creatorHandle: creator.handle,
+      wishlistItemId: item.id, itemTitle: item.title, amount: item.price, message, supporterName, paymentProvider: 'NICEPAY' });
     location.hash = 'checkout';
   }
 
@@ -588,7 +657,12 @@ export function App() {
       {page === 'success' && <Success />}
       {page.startsWith('payment-result/') && <PaymentResult orderId={page.slice('payment-result/'.length)} />}
       {page === 'wallet' && <WalletPage walletPoints={walletPoints} chargePoints={chargePoints} />}
-      {page === 'dashboard' && <Dashboard supports={supports} revenue={revenue} session={session} />}
+      {page === 'fan-dashboard' && <FanPage session={session} creators={creators} startCheckout={startCheckout} />}
+      {page === 'dashboard' && session?.user.role === 'CREATOR' && <CreatorDashboard session={session} />}
+      {page === 'dashboard' && session?.user.role !== 'CREATOR' && <Dashboard supports={supports} revenue={revenue} session={session} />}
+      {page === 'creator-dashboard' && session?.user.role === 'CREATOR' && <CreatorDashboard session={session} />}
+      {(page === 'creator-dashboard' || page === 'dashboard') && !session && <section className="page-shell"><div className="section-head"><div><span className="kicker">Creator Studio</span><h1>셀럽 로그인이 필요합니다.</h1><p>등록한 프로필 상세 정보와 정산을 확인하려면 로그인해 주세요.</p></div><a className="solid-button" href="#creator-login"><LogIn size={17} /> 셀럽 로그인</a></div></section>}
+      {(page === 'creator-dashboard' || page === 'dashboard') && session && session.user.role !== 'CREATOR' && <section className="page-shell"><p>셀럽 계정으로 로그인해 주세요.</p><a href="#creator-login">셀럽 로그인</a></section>}
       {page === 'admin-login' && <AuthPage mode="login" session={session} setSession={setSession} />}
       {page.startsWith('admin') && page !== 'admin-login' && !verifiedAdmin && (
         <section className="page-shell"><p>관리자 로그인이 필요합니다.</p><a href="#admin-login">관리자 로그인</a></section>
@@ -621,6 +695,7 @@ function Nav({ session, onLogout }: { session: Session | null; onLogout: () => v
         <a href="#categories">크리에이터</a>
         <a href="#creator-signup">셀럽 등록</a>
         <a href="#fan-signup">팬 가입</a>
+        {session?.user.role === 'CREATOR' ? <a href="#creator-dashboard">셀럽 스튜디오</a> : <a href="#fan-dashboard">{session?.user.role === 'FAN' ? '내 팬페이지' : '팬 페이지'}</a>}
         <a href="#business">안전 안내</a>
       </div>
       <div className="nav-actions">
@@ -691,7 +766,7 @@ function Home({
         </div>
         <CreatorGrid creators={creators.slice(0, 6)} />
       </section>
-      <section className="content-band ranking-band"><div className="section-head"><div><span className="kicker">Trending now</span><h2>이번 주 주목받는 크리에이터</h2><p>활동과 팬 참여를 바탕으로 매주 새롭게 발견합니다.</p></div><a className="text-link" href="#categories">랭킹 전체 보기 <ArrowRight size={16} /></a></div><div className="ranking-list">{creators.slice(0, 5).map((creator, index) => <a className="ranking-row" href={`#creator/${creator.slug}`} key={creator.id}><strong>{String(index + 1).padStart(2, '0')}</strong><img src={creator.avatarUrl} alt="" /><span><b>{creator.displayName}</b><small>{creator.handle} · {creator.platform}</small></span><em>{index === 0 ? 'RISING' : index < 3 ? 'POPULAR' : 'NEW'}</em><ArrowRight size={17} /></a>)}</div></section>
+      <section className="content-band ranking-band"><div className="section-head"><div><span className="kicker">Trending now</span><h2>이번 주 주목받는 크리에이터</h2><p>활동과 팬 참여를 바탕으로 매주 새롭게 발견합니다.</p></div><a className="text-link" href="#categories">랭킹 전체 보기 <ArrowRight size={16} /></a></div><div className="ranking-list">{creators.slice(0, 5).map((creator, index) => <a className="ranking-row" href={`#creator/${creator.slug}`} key={creator.id}><strong>{String(index + 1).padStart(2, '0')}</strong><CreatorSheetImage creator={creator} className="ranking-avatar" /><span><b>{creator.displayName}</b><small>{creator.handle} · {creator.platform}</small></span><em>{index === 0 ? 'RISING' : index < 3 ? 'POPULAR' : 'NEW'}</em><ArrowRight size={17} /></a>)}</div></section>
       <section className="platform-strip"><span>CREATORS FROM EVERYWHERE</span><b>Instagram</b><b>YouTube</b><b>TikTok</b><b>Twitch</b><b>Live & private</b></section>
       <section className="content-band how-band">
         <div className="section-head"><div><span className="kicker">Simple by design</span><h2>시작은 가볍게,<br />연결은 오래도록.</h2></div></div>
@@ -892,9 +967,9 @@ function CreatorGrid({ creators }: { creators: Creator[] }) {
     <div className="creator-grid">
       {creators.map(creator => (
         <a className="creator-card" href={`#creator/${creator.slug}`} key={creator.id}>
-          <img className="creator-cover" src={creator.coverUrl} alt="" />
+          <CreatorSheetImage creator={creator} className="creator-cover" tile={0} alt={`${creator.displayName} 프로필 사진`} />
           <div className="creator-body">
-            <img className="avatar" src={creator.avatarUrl} alt="" />
+            <CreatorSheetImage creator={creator} className="avatar" />
             <div>
               <h3>{creator.displayName}</h3>
               <span>{creator.handle}</span>
@@ -909,6 +984,73 @@ function CreatorGrid({ creators }: { creators: Creator[] }) {
       ))}
     </div>
   );
+}
+
+function FanPage({
+  session,
+  creators,
+  startCheckout
+}: {
+  session: Session | null;
+  creators: Creator[];
+  startCheckout: (creator: Creator, item: WishlistItem, message: string, supporterName: string) => void;
+}) {
+  const [creatorId, setCreatorId] = useState(creators[0]?.id || '');
+  const [productId, setProductId] = useState('');
+  const [message, setMessage] = useState('');
+  const [pg, setPg] = useState<{ provider: string; ready: boolean; mode: string; message: string } | null>(null);
+  const [orders, setOrders] = useState<Array<{ id: string; creator: string; product: string; message: string; amount: number; paymentProvider: string; status: string; createdAt: string; paidAt: string | null }>>([]);
+  const [loadError, setLoadError] = useState('');
+  const [orderFilter, setOrderFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'REFUNDED'>('ALL');
+  const creator = creators.find(item => item.id === creatorId) || creators[0];
+  const products = creator?.wishlist || [];
+  const product = products.find(item => item.id === productId) || products.find(item => item.categoryId === 'dm') || products[0];
+
+  useEffect(() => {
+    if (!creators.some(item => item.id === creatorId) && creators[0]) setCreatorId(creators[0].id);
+  }, [creators, creatorId]);
+  useEffect(() => {
+    fetch(`${API}/api/payments/config`).then(response => response.ok ? response.json() : null).then(data => setPg(data)).catch(() => setPg(null));
+  }, []);
+  useEffect(() => {
+    if (!session || session.user.role !== 'FAN') return;
+    fetch(`${API}/api/fan/orders`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('팬 결제 내역을 불러오지 못했습니다. 다시 로그인해 주세요.');
+        setOrders(await response.json());
+      }).catch(reason => setLoadError(reason instanceof Error ? reason.message : '내역 조회에 실패했습니다.'));
+  }, [session]);
+
+  if (!session) return <section className="page-shell"><div className="section-head"><div><span className="kicker">Fan Space</span><h1>나의 팬 페이지</h1><p>로그인하면 보낸 메시지와 결제 내역을 확인할 수 있습니다.</p></div></div><div className="fan-auth-actions"><a className="solid-button" href="#fan-login">팬 로그인</a><a className="ghost-button" href="#fan-signup">팬 가입</a></div></section>;
+  if (session.user.role !== 'FAN') return <section className="page-shell"><h1>팬 계정으로 로그인해 주세요.</h1><a className="solid-button" href="#fan-login">팬 로그인</a></section>;
+
+  const paidOrders = orders.filter(order => order.status === 'PAID');
+  const pendingOrders = orders.filter(order => order.status === 'PENDING_PAYMENT' || order.status === 'PENDING');
+  const refundedOrders = orders.filter(order => order.status === 'REFUNDED');
+  const filteredOrders = orderFilter === 'ALL' ? orders : orderFilter === 'PAID' ? paidOrders : orderFilter === 'PENDING' ? pendingOrders : refundedOrders;
+  const paidTotal = paidOrders.reduce((total, order) => total + order.amount, 0);
+
+  return <section className="page-shell fan-page">
+    <div className="fan-profile-header"><div className="fan-profile-title"><span className="fan-profile-avatar" aria-hidden="true">{session.user.name.slice(0, 1)}</span><div><span className="kicker">My Fan Space</span><h1>{session.user.name}님의 팬 페이지</h1><p>{session.user.email}</p></div></div><a className="solid-button" href="#categories">셀럽 둘러보기 <ArrowRight size={16} /></a></div>
+    <div className="fan-overview" aria-label="팬 활동 요약"><article><span>누적 결제액</span><b>{paidTotal.toLocaleString()}원</b><small>결제 완료된 주문 기준</small></article><article><span>결제 완료</span><b>{paidOrders.length}건</b><small>보낸 메시지 {paidOrders.filter(order => order.message).length}건</small></article><article><span>결제 확인 중</span><b>{pendingOrders.length}건</b><small>승인 결과에 따라 갱신됩니다.</small></article></div>
+    <div className={`fan-pg-status ${pg?.ready ? 'ready' : ''}`}><div><span className="kicker">NICEPAY · {pg?.mode || '연결 확인 중'}</span><b>{pg?.ready ? 'PG 결제 이용 가능' : 'PG 결제 준비 중'}</b><span>{pg?.ready ? pg.message : pg?.message || '결제 PG 연결 상태를 확인할 수 없습니다.'}</span></div><span className="pg-indicator" aria-label={pg?.ready ? 'PG 연결됨' : 'PG 미연결'} /></div>
+    <div className="fan-page-grid">
+      <article className="fan-message-compose">
+        <span className="kicker">Message + Support</span><h2>셀럽에게 메시지 보내기</h2>
+        <label>셀럽<select value={creator?.id || ''} onChange={event => { setCreatorId(event.target.value); setProductId(''); }}>{creators.map(item => <option value={item.id} key={item.id}>{item.displayName} · {item.handle}</option>)}</select></label>
+        <label>메시지 이용권<select value={product?.id || ''} onChange={event => setProductId(event.target.value)}>{products.map(item => <option value={item.id} key={item.id}>{item.title} · {item.price.toLocaleString()}원</option>)}</select></label>
+        <label>응원 메시지<textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={500} placeholder="결제 주문과 함께 셀럽에게 전달할 메시지를 적어 주세요." /></label>
+        <div className="fan-message-footer"><small>{message.length}/500자 · 결제 주문 내역에 저장됩니다.</small><b>{product ? `${product.price.toLocaleString()}원` : '상품 없음'}</b></div>
+        <button className="solid-button large" type="button" disabled={!pg?.ready || !creator || !product || !message.trim()} onClick={() => creator && product && startCheckout(creator, product, message.trim(), session.user.name)}>{pg?.ready ? 'NICEPAY로 결제하고 메시지 보내기' : 'PG 연결 후 결제 가능'}</button>
+        <p className="form-hint">결제 완료된 주문의 메시지 내용이 내역에 남습니다. Instagram DM 자동 발송은 별도 Meta API 권한 및 연동 전까지 제공되지 않습니다.</p>
+      </article>
+      <aside className="fan-page-help"><h2>결제 흐름</h2><ol><li>셀럽과 메시지 이용권을 선택합니다.</li><li>메시지를 작성하고 NICEPAY 결제를 진행합니다.</li><li>승인된 주문만 결제 완료로 기록되며, 아래 내역에서 확인할 수 있습니다.</li></ol><a href="#categories">셀럽 둘러보기 <ArrowRight size={16} /></a></aside>
+    </div>
+    <section className="fan-orders"><div className="fan-order-heading"><div><span className="kicker">My messages & payments</span><h2>보낸 메시지 · 결제 내역</h2></div><span className="account-chip">전체 {orders.length}건</span></div>
+      <div className="fan-order-filters" role="group" aria-label="결제 내역 필터">{([{ key: 'ALL', label: '전체' }, { key: 'PAID', label: '결제 완료' }, { key: 'PENDING', label: '확인 중' }, { key: 'REFUNDED', label: '환불' }] as const).map(item => <button key={item.key} type="button" className={orderFilter === item.key ? 'active' : ''} aria-pressed={orderFilter === item.key} onClick={() => setOrderFilter(item.key)}>{item.label}<span>{item.key === 'ALL' ? orders.length : item.key === 'PAID' ? paidOrders.length : item.key === 'PENDING' ? pendingOrders.length : refundedOrders.length}</span></button>)}</div>
+      {loadError ? <p className="form-error" role="alert">{loadError}</p> : filteredOrders.length ? <div className="fan-order-list">{filteredOrders.map(order => <article className="fan-order" key={order.id}><header><div><b>{order.creator}</b><small>{order.product} · {new Date(order.createdAt).toLocaleString('ko-KR')}</small></div><span className={`application-status ${order.status === 'PAID' ? 'approved' : order.status === 'REFUNDED' ? 'on-hold' : ''}`}>{order.status === 'PAID' ? '결제 완료' : order.status === 'REFUNDED' ? '환불' : '결제 확인 중'}</span></header><p>{order.message || '응원 메시지 없음'}</p><footer><span>{order.paymentProvider}{order.paidAt ? ` · 승인 ${new Date(order.paidAt).toLocaleString('ko-KR')}` : ''}</span><b>{order.amount.toLocaleString()}원</b></footer></article>)}</div> : <div className="empty-state">{orders.length ? '선택한 상태의 내역이 없습니다.' : '아직 메시지나 결제 내역이 없습니다. 셀럽을 둘러보고 첫 응원을 보내보세요.'}</div>}
+    </section>
+  </section>;
 }
 
 function CreatorPage({
@@ -928,11 +1070,9 @@ function CreatorPage({
     <section className="page-shell">
       <div
         className="profile-hero"
-        style={{
-          backgroundImage: `linear-gradient(90deg, rgba(12,18,32,.78), rgba(12,18,32,.16)), url(${creator.coverUrl})`
-        }}
+        style={creatorHeroStyle(creator)}
       >
-        <img className="profile-avatar" src={creator.avatarUrl} alt="" />
+        <CreatorSheetImage creator={creator} className="profile-avatar" />
         <span className="eyebrow">
           <ShieldCheck size={16} />
           {creator.addressMasked}
@@ -963,7 +1103,7 @@ function CreatorPage({
           <div className="wish-grid">
             {creator.wishlist.map(item => (
               <article className="wish-card" key={item.id}>
-                <img src={item.imageUrl} alt="" />
+              <CreatorSheetImage creator={creator} className="wish-image" tile={3 + creator.wishlist.indexOf(item)} cropY="23%" />
                 <div>
                   <h3>{item.title}</h3>
                   <p>{item.note}</p>
@@ -978,7 +1118,7 @@ function CreatorPage({
             ))}
           </div>
           <article className="paid-dm-card">
-            <div className="paid-dm-media"><img src={creator.avatarUrl} alt="" /><span>결제 후 공개</span></div>
+            <div className="paid-dm-media"><CreatorSheetImage creator={creator} className="paid-dm-art" tile={4} cropY="13%" /><span>결제 후 공개</span></div>
             <div><span className="kicker">Paid DM</span><h3>팬 메시지와 사진 열람권</h3><p>결제 전 사진과 메시지는 블러 처리되며, 결제 후 {creator.displayName}에게 응원 메시지를 보낼 수 있습니다.</p></div>
             <button className="solid-button" type="button" onClick={() => { const item = creator.wishlist.find(entry => entry.categoryId === 'dm') || creator.wishlist[0]; if (item) beginCheckout(item); }}>DM 이용권 결제하기</button>
           </article>
@@ -1008,6 +1148,7 @@ function CreatorPage({
 
 function CreatorGallery({ creator }: { creator: Creator }) {
   const [activePhoto, setActivePhoto] = useState<number | null>(null);
+  const [failedUploads, setFailedUploads] = useState<string[]>([]);
   const uploads = (creator.galleryImages || []).filter(Boolean).slice(0, 10);
   const sheet = creatorGallerySheets[creator.slug] || creatorGallerySheets[creator.handle] || creatorGallerySheets['hong-gil-sun'];
   const photos = [
@@ -1022,6 +1163,11 @@ function CreatorGallery({ creator }: { creator: Creator }) {
     backgroundImage: `url("${sheet}")`,
     backgroundPosition: `${(tile % 5) * 25}% ${Math.floor(tile / 5) * 100}%`
   });
+  const isUploadedVisible = (index: number) => photos[index].uploaded && !failedUploads.includes(photos[index].src);
+
+  const markUploadFailed = (src: string) => {
+    setFailedUploads(current => current.includes(src) ? current : [...current, src]);
+  };
 
   useEffect(() => {
     if (activePhoto === null) return;
@@ -1045,10 +1191,10 @@ function CreatorGallery({ creator }: { creator: Creator }) {
       <div className="creator-gallery-grid">
         {photos.map((photo, index) => (
           <button className="creator-gallery-item" type="button" key={`${photo.src}-${photo.tile}-${index}`} onClick={() => setActivePhoto(index)} aria-label={`${creator.displayName} 사진 ${index + 1} 크게 보기`}>
-            {photo.uploaded
-              ? <img className="creator-gallery-image" src={photo.src} alt={`${creator.displayName} 등록 사진 ${index + 1}`} loading="lazy" />
+            {isUploadedVisible(index)
+              ? <img className="creator-gallery-image" src={photo.src} alt={`${creator.displayName} 등록 사진 ${index + 1}`} loading="lazy" onError={() => markUploadFailed(photo.src)} />
               : <span className="creator-gallery-image creator-gallery-sprite" style={galleryStyle(photo.tile)} role="img" aria-label={`${creator.displayName} 샘플 일러스트 ${index + 1}`} />}
-            <span className="creator-gallery-label">{photo.uploaded ? '등록 사진' : '샘플 일러스트'}</span>
+            <span className="creator-gallery-label">{isUploadedVisible(index) ? '등록 사진' : '샘플 일러스트'}</span>
           </button>
         ))}
       </div>
@@ -1056,10 +1202,10 @@ function CreatorGallery({ creator }: { creator: Creator }) {
         <div className="creator-gallery-lightbox" role="presentation" onClick={() => setActivePhoto(null)}>
           <section className="creator-gallery-dialog" role="dialog" aria-modal="true" aria-label={`${creator.displayName} 갤러리 사진`} onClick={event => event.stopPropagation()}>
             <button className="icon-button creator-gallery-close" type="button" onClick={() => setActivePhoto(null)} aria-label="사진 닫기"><X size={20} /></button>
-            {photos[activePhoto].uploaded
-              ? <img className="creator-gallery-large" src={photos[activePhoto].src} alt={`${creator.displayName} 등록 사진 ${activePhoto + 1}`} />
+            {isUploadedVisible(activePhoto)
+              ? <img className="creator-gallery-large" src={photos[activePhoto].src} alt={`${creator.displayName} 등록 사진 ${activePhoto + 1}`} onError={() => markUploadFailed(photos[activePhoto].src)} />
               : <div className="creator-gallery-large creator-gallery-sprite" style={galleryStyle(photos[activePhoto].tile)} role="img" aria-label={`${creator.displayName} 샘플 일러스트 ${activePhoto + 1}`} />}
-            <p>{activePhoto + 1} / {photos.length} · {photos[activePhoto].uploaded ? '등록 사진' : '샘플 일러스트'}</p>
+            <p>{activePhoto + 1} / {photos.length} · {isUploadedVisible(activePhoto) ? '등록 사진' : '샘플 일러스트'}</p>
           </section>
         </div>
       )}
@@ -1079,6 +1225,11 @@ function CheckoutPage({
   const [provider, setProvider] = useState<'NICEPAY'>('NICEPAY');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; message: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API}/api/payments/config`).then(response => response.ok ? response.json() : null).then(data => setPgStatus(data)).catch(() => setPgStatus(null));
+  }, []);
 
   const adminFee = Math.round((draft.amount * 25) / 100);
   const creatorPayout = draft.amount - adminFee;
@@ -1106,7 +1257,7 @@ function CheckoutPage({
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.code === 'PG_NOT_READY' ? 'NICEPAY 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' ? '결제 준비 중인 상품입니다.' : `주문 생성 실패 (${response.status})`);
+          throw new Error(failure.code === 'PG_NOT_READY' ? 'NICEPAY 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
         }
         const order = await response.json();
         await openNicepay(order.checkout, setError);
@@ -1127,9 +1278,8 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>결제 버튼을 누르면 EON Korea 리틀리 결제 페이지가 열립니다.</p>
-          <a className="solid-button" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">리틀리에서 결제하기</a>
-          <p>결제 완료 후 리틀리 주문번호를 보관해 주세요. 관리자가 결제 확인 후 포인트와 지급 예정액을 반영합니다.</p>
+          <p>NICEPAY 카드 결제 승인 후 주문 상태가 확인됩니다.</p>
+          <span className={`fan-pg-inline ${pgStatus?.ready ? 'ready' : ''}`}>NICEPAY · {pgStatus?.mode || '상태 확인 중'} · {pgStatus?.message || 'PG 연결 상태를 확인할 수 없습니다.'}</span>
         </div>
       </div>
       <div className="checkout-layout">
@@ -1163,7 +1313,7 @@ function CheckoutPage({
           <label>
             결제수단
             <select value={provider} onChange={event => setProvider(event.target.value as 'NICEPAY')}>
-              <option value="NICEPAY">리틀리 결제</option>
+            <option value="NICEPAY">NICEPAY 카드</option>
             </select>
           </label>
           <label>
@@ -1175,12 +1325,10 @@ function CheckoutPage({
             <textarea value={draft.message} readOnly />
           </label>
           {error && <p className="form-error">{error}</p>}
-          <a className="solid-button large" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">
-            {draft.amount.toLocaleString()}원 리틀리에서 결제하기
-          </a>
-          <button className="ghost-button large" type="button" onClick={pay} disabled={busy}>
-            직접 PG 연결 상태 확인
+          <button className="solid-button large" type="button" onClick={pay} disabled={busy || !pgStatus?.ready}>
+            {busy ? '결제창 연결 중...' : pgStatus?.ready ? `${draft.amount.toLocaleString()}원 NICEPAY 결제` : 'NICEPAY 연결 후 결제 가능'}
           </button>
+          {!pgStatus?.ready && <p className="form-hint">PG 가맹점 설정이 완료되지 않아 결제를 시작할 수 없습니다.</p>}
           <button className="ghost-button large" type="button" onClick={onCancel}>
             돌아가기
           </button>
@@ -1266,13 +1414,18 @@ function AuthPage({
   session: Session | null;
   setSession: (session: Session | null) => void;
 }) {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(signupRole === 'FAN' ? '팬 회원' : '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [creatorBio, setCreatorBio] = useState('');
-  const [creatorPhotos, setCreatorPhotos] = useState('');
+  const [creatorPhotos, setCreatorPhotos] = useState<File[]>([]);
   const [instagramVideoUrl, setInstagramVideoUrl] = useState('');
-  const [payoutAccount, setPayoutAccount] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [instagramId, setInstagramId] = useState('');
+  const [dmAlertThreshold, setDmAlertThreshold] = useState('10000');
+  const [dmNotice, setDmNotice] = useState('');
   const [role, setRole] = useState<'FAN' | 'CREATOR'>(signupRole || 'CREATOR');
   const [loginAs, setLoginAs] = useState<'ADMIN' | 'FAN' | 'CREATOR'>(loginRole || (location.hash.replace('#', '') === 'admin-login' ? 'ADMIN' : 'FAN'));
   const [error, setError] = useState('');
@@ -1303,7 +1456,7 @@ function AuthPage({
             return;
           }
           setSession(nextSession);
-          location.hash = isAdminAccount ? 'admin' : loginAs === 'CREATOR' ? 'dashboard' : 'home';
+          location.hash = isAdminAccount ? 'admin' : loginAs === 'CREATOR' ? 'creator-dashboard' : 'fan-dashboard';
           return;
         }
         setBusy(false);
@@ -1317,13 +1470,33 @@ function AuthPage({
 
     if (API) {
       const path = '/api/auth/signup';
+      let photoUrls: string[] = [];
+      if (role === 'CREATOR') {
+        if (!creatorPhotos.length) {
+          setBusy(false);
+          setError('사진을 1장 이상 첨부해 주세요. 가입 후 최대 10장까지 추가할 수 있습니다.');
+          return;
+        }
+        try {
+          photoUrls = await Promise.all(creatorPhotos.map(optimizeCreatorPhoto));
+        } catch (photoError) {
+          setBusy(false);
+          setError(photoError instanceof Error ? photoError.message : '사진을 처리하지 못했습니다.');
+          return;
+        }
+      }
       const payload = {
         name, email, password, role,
         ...(role === 'CREATOR' ? {
           bio: creatorBio,
-          photoUrls: creatorPhotos.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean).slice(0, 10),
+          photoUrls,
           instagramVideoUrl: instagramVideoUrl.trim() || undefined,
-          payoutAccount: payoutAccount.trim() || undefined
+          bankName: bankName.trim(),
+          accountHolder: accountHolder.trim(),
+          accountNumber: accountNumber.trim(),
+          instagramId: instagramId.trim().replace(/^@/, '') || undefined,
+          dmAlertThreshold: Number(dmAlertThreshold),
+          dmNotice: dmNotice.trim() || undefined
         } : {})
       };
       const response = await fetch(`${API}${path}`, {
@@ -1333,7 +1506,17 @@ function AuthPage({
       }).catch(() => null);
       if (response?.ok) {
         setSession((await response.json()) as Session);
-        location.hash = 'dashboard';
+        location.hash = role === 'CREATOR' ? 'creator-dashboard' : 'fan-dashboard';
+        return;
+      }
+      if (response?.status === 409) {
+        setBusy(false);
+        setError('이미 가입된 이메일입니다. 로그인 화면에서 로그인해 주세요.');
+        return;
+      }
+      if (response?.status === 400) {
+        setBusy(false);
+        setError('입력한 내용을 확인해 주세요. 이메일 형식과 비밀번호(4자 이상)를 확인해 주세요.');
         return;
       }
     }
@@ -1346,14 +1529,14 @@ function AuthPage({
     setError(`${provider} 로그인은 아직 연결되지 않았습니다. 이메일 로그인을 이용해 주세요.`);
   }
 
-  if (session && !isAdminLogin) {
+  if (session && mode === 'login' && !isAdminLogin) {
     return (
       <section className="auth-shell">
         <div className="auth-card">
           <Check size={34} />
           <h1>이미 로그인되어 있습니다.</h1>
           <p>{session.user.email}</p>
-          <a className="solid-button large" href="#dashboard">
+          <a className="solid-button large" href={session.user.role === 'CREATOR' ? '#creator-dashboard' : session.user.role === 'FAN' ? '#fan-dashboard' : '#admin'}>
             대시보드로 이동
           </a>
         </div>
@@ -1397,9 +1580,27 @@ function AuthPage({
             </div>}
             {role === 'CREATOR' && <div className="creator-application-fields">
               <label>셀럽 자기소개<textarea value={creatorBio} onChange={event => setCreatorBio(event.target.value)} placeholder="팬들에게 보여줄 자기소개를 입력해 주세요." maxLength={500} required /></label>
-              <label>사진 최대 10장 <textarea value={creatorPhotos} onChange={event => setCreatorPhotos(event.target.value)} placeholder="사진 URL을 줄바꿈 또는 쉼표로 구분해 최대 10개 입력" required /></label>
+              <label>프로필 사진 1~10장
+                <input type="file" accept="image/*" multiple required={!creatorPhotos.length} onChange={event => {
+                  const files = Array.from(event.target.files || []);
+                  if (files.length > 10) {
+                    setError('사진은 한 번에 최대 10장까지 선택할 수 있습니다.');
+                    event.target.value = '';
+                    return;
+                  }
+                  setError('');
+                  setCreatorPhotos(files);
+                }} />
+              </label>
+              <p className="form-hint">가입 시 최소 1장, 최대 10장까지 첨부할 수 있습니다. 이후 대시보드에서 남은 사진을 추가할 수 있어요. {creatorPhotos.length ? `선택 ${creatorPhotos.length}장` : ''}</p>
               <label>인스타그램 동영상 1개 <input type="url" value={instagramVideoUrl} onChange={event => setInstagramVideoUrl(event.target.value)} placeholder="https://www.instagram.com/reel/..." required /></label>
-              <label>정산 계좌번호 <input value={payoutAccount} onChange={event => setPayoutAccount(event.target.value)} placeholder="은행명 / 예금주 / 계좌번호" required /></label>
+              <label>인스타그램 아이디 <input value={instagramId} onChange={event => setInstagramId(event.target.value)} placeholder="@your.instagram" /></label>
+              <label>DM 알림 기준 (하트)<input type="number" min="0" max="100000000" step="1000" value={dmAlertThreshold} onChange={event => setDmAlertThreshold(event.target.value)} required /></label>
+              <label>팬에게 보여줄 후원 알림 문구<textarea value={dmNotice} onChange={event => setDmNotice(event.target.value)} placeholder="예: 10,000하트 이상 후원 시 알림 메시지를 보내드립니다." maxLength={500} /></label>
+              <p className="form-hint">알림 기준과 문구는 관리자 검토용 설정입니다. 실제 Instagram DM 자동 발송은 Meta API 권한 및 연동 후 이용할 수 있습니다.</p>
+              <label>은행명 <input value={bankName} onChange={event => setBankName(event.target.value)} placeholder="예: 국민은행" autoComplete="off" required /></label>
+              <label>예금주 <input value={accountHolder} onChange={event => setAccountHolder(event.target.value)} placeholder="예금주명" autoComplete="off" required /></label>
+              <label>계좌번호 <input type="text" inputMode="numeric" value={accountNumber} onChange={event => setAccountNumber(event.target.value)} placeholder="계좌번호 입력" autoComplete="off" required /></label>
               <p className="form-hint">계좌번호는 관리자 정산 화면에서만 확인됩니다.</p>
             </div>}
           </>
@@ -1460,13 +1661,165 @@ function Dashboard({ supports, revenue, session }: { supports: Support[]; revenu
         <Stat icon={<Bell />} label="정산 대기" value={`${supports.filter(item => item.status === 'PAID').length}건`} />
       </div>
       <PaymentTable supports={supports} />
+      {session?.user.role === 'CREATOR' && <CreatorApplicationStatus session={session} />}
       {session?.user.role === 'CREATOR' && <CreatorPayoutPanel session={session} />}
+      {session?.user.role === 'CREATOR' && <CreatorPhotoManager session={session} />}
     </section>
   );
 }
 
+type CreatorProfileDraft = {
+  name: string; email: string; bio: string; instagramId: string; instagramVideoUrl: string;
+  dmAlertThreshold: number; dmNotice: string; bankName: string; accountHolder: string;
+  accountNumber: string; reviewStatus: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote: string;
+};
+
+function CreatorDashboard({ session }: { session: Session }) {
+  const [profile, setProfile] = useState<CreatorProfileDraft | null>(null);
+  const [draft, setDraft] = useState<CreatorProfileDraft | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const loadProfile = () => fetch(`${API}/api/creators/me/profile`, { headers: { Authorization: `Bearer ${session.token}` } })
+    .then(async response => {
+      if (!response.ok) throw new Error('셀럽 상세 정보를 불러오지 못했습니다. 다시 로그인해 주세요.');
+      const result = await response.json() as CreatorProfileDraft;
+      setProfile(result);
+      setDraft(result);
+    });
+  useEffect(() => { loadProfile().catch(reason => setError(reason instanceof Error ? reason.message : '정보를 불러오지 못했습니다.')); }, [session.token]);
+  const setField = <K extends keyof CreatorProfileDraft>(key: K, value: CreatorProfileDraft[K]) => setDraft(current => current ? { ...current, [key]: value } : current);
+  async function saveProfile(event: FormEvent) {
+    event.preventDefault();
+    if (!draft) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const response = await fetch(`${API}/api/creators/me/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ bio: draft.bio, instagramId: draft.instagramId, instagramVideoUrl: draft.instagramVideoUrl,
+          dmAlertThreshold: Number(draft.dmAlertThreshold), dmNotice: draft.dmNotice, bankName: draft.bankName,
+          accountHolder: draft.accountHolder, accountNumber: draft.accountNumber })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.code === 'INVALID_CREATOR_PROFILE' ? '입력 내용을 확인해 주세요. 소개와 계좌 정보는 필수입니다.' : '저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      await loadProfile();
+      setMessage('프로필 변경 사항을 저장했습니다.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '저장하지 못했습니다.'); }
+    finally { setBusy(false); }
+  }
+  const review = profile?.reviewStatus === 'APPROVED' ? '승인 완료' : profile?.reviewStatus === 'ON_HOLD' ? '검토 보류' : '검토 중';
+  if (!draft) return <section className="page-shell"><p>{error || '셀럽 정보를 불러오는 중입니다.'}</p></section>;
+  return <section className="creator-dashboard page-shell">
+    <header className="creator-dashboard-head">
+      <div><span className="kicker">Creator Studio / Profile</span><h1>{profile?.name}님의 스튜디오</h1><p>프로필과 팬 소통 정보를 관리하세요.</p></div>
+      <span className={`creator-review-pill ${profile?.reviewStatus === 'APPROVED' ? 'is-approved' : ''}`}>{review}</span>
+    </header>
+    {profile?.reviewStatus !== 'APPROVED' && <div className={`creator-review-status ${profile?.reviewStatus === 'ON_HOLD' ? 'on-hold' : ''}`}><b>{profile?.reviewStatus === 'ON_HOLD' ? '프로필 검토가 보류되었습니다.' : '프로필 승인 검토 중입니다.'}</b><span>{profile?.reviewNote || '관리자 확인이 끝나면 크리에이터 프로필이 공개됩니다.'}</span></div>}
+    <div className="creator-dashboard-grid">
+      <div className="creator-dashboard-main">
+        <form className="admin-panel creator-profile-editor" onSubmit={saveProfile}>
+          <div className="admin-panel-head"><div><span className="kicker">Public profile</span><h2>프로필 상세 정보</h2></div></div>
+          <p className="creator-private-note">이름과 이메일은 계정 정보에서 가져오며, 수정이 필요하면 관리자에게 문의해 주세요.</p>
+          <div className="creator-profile-readonly"><span><small>이름</small><b>{profile?.name}</b></span><span><small>로그인 이메일</small><b>{profile?.email}</b></span></div>
+          <label>팬에게 보여줄 자기소개<textarea value={draft.bio} onChange={event => setField('bio', event.target.value)} maxLength={500} required /></label>
+          <div className="creator-profile-fields">
+            <label>인스타그램 아이디<input value={draft.instagramId} onChange={event => setField('instagramId', event.target.value)} placeholder="@your.instagram" /></label>
+            <label>대표 릴스/동영상 URL<input type="url" value={draft.instagramVideoUrl} onChange={event => setField('instagramVideoUrl', event.target.value)} placeholder="https://www.instagram.com/reel/..." /></label>
+          </div>
+          <div className="creator-editor-divider"><span>팬 알림 설정</span></div>
+          <label>알림 기준 하트 수<input type="number" min="0" max="100000000" step="1000" value={draft.dmAlertThreshold} onChange={event => setField('dmAlertThreshold', Number(event.target.value))} required /></label>
+          <label>후원 알림 안내 문구<textarea value={draft.dmNotice} onChange={event => setField('dmNotice', event.target.value)} maxLength={500} placeholder="예: 10,000하트 이상 후원 시 알림 메시지를 보내드립니다." /></label>
+          <p className="form-hint">현재 설정은 프로필/관리자 안내용입니다. 카카오·Instagram 자동 알림은 해당 플랫폼 연동 권한이 있어야 발송됩니다.</p>
+          <div className="creator-editor-divider"><span>정산 계좌</span><small>본인과 관리자만 확인할 수 있습니다.</small></div>
+          <div className="creator-profile-fields bank-fields"><label>은행명<input value={draft.bankName} onChange={event => setField('bankName', event.target.value)} required /></label><label>예금주<input value={draft.accountHolder} onChange={event => setField('accountHolder', event.target.value)} required /></label><label>계좌번호<input inputMode="numeric" autoComplete="off" value={draft.accountNumber} onChange={event => setField('accountNumber', event.target.value)} required /></label></div>
+          {message && <p className="creator-save-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
+          <button className="solid-button" type="submit" disabled={busy}>{busy ? '저장 중' : '프로필 저장'}</button>
+        </form>
+        <CreatorPhotoManager session={session} />
+      </div>
+      <aside className="creator-dashboard-side"><CreatorPayoutPanel session={session} /><div className="creator-side-note"><span className="kicker">Visibility</span><h2>공개 범위</h2><p>자기소개와 프로필 사진은 승인 후 팬에게 공개됩니다. 계좌번호, 로그인 이메일, 관리자 검토 메모는 공개 프로필에 표시되지 않습니다.</p><a href="#home">홈페이지 보기 <ArrowRight size={15} /></a></div></aside>
+    </div>
+  </section>;
+}
+
+function CreatorApplicationStatus({ session }: { session: Session }) {
+  const [application, setApplication] = useState<{ status: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote: string } | null>(null);
+  useEffect(() => {
+    fetch(`${API}/api/creators/me/application`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data) setApplication(data); })
+      .catch(() => undefined);
+  }, [session.token]);
+  if (!application) return null;
+  const approved = application.status === 'APPROVED';
+  const held = application.status === 'ON_HOLD';
+  return <div className={`creator-review-status ${approved ? 'approved' : held ? 'on-hold' : ''}`}>
+    <b>{approved ? '프로필 승인 완료' : held ? '프로필 검토 보류' : '프로필 검토 대기 중'}</b>
+    <span>{approved ? '크리에이터 프로필이 공개 중입니다.' : held ? '관리자 메모를 확인한 뒤 수정해 다시 검토를 요청해 주세요.' : '계좌와 프로필 정보 확인 후 승인되면 크리에이터 페이지가 공개됩니다.'}</span>
+    {application.reviewNote && <p>관리자 메모: {application.reviewNote}</p>}
+  </div>;
+}
+
+function CreatorPhotoManager({ session }: { session: Session }) {
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const remaining = Math.max(0, 10 - photos.length);
+
+  useEffect(() => {
+    fetch(`${API}/api/creators/me/photos`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('프로필 사진을 불러오지 못했습니다.');
+        const result = await response.json();
+        setPhotos(result.photos || []);
+      })
+      .catch(reason => setError(reason instanceof Error ? reason.message : '프로필 사진을 불러오지 못했습니다.'));
+  }, [session.token]);
+
+  async function uploadPhotos() {
+    if (!files.length || files.length > remaining) return;
+    setBusy(true);
+    setError('');
+    try {
+      const uploaded = await Promise.all(files.map(optimizeCreatorPhoto));
+      const response = await fetch(`${API}/api/creators/me/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ photos: uploaded })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.code === 'GALLERY_LIMIT_REACHED' ? `사진은 총 10장까지 등록할 수 있습니다. 남은 장수: ${result.remaining}장` : '사진을 저장하지 못했습니다. 다시 시도해 주세요.');
+      setPhotos(result.photos || []);
+      setFiles([]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '사진을 저장하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="admin-panel creator-photo-manager">
+    <div className="admin-panel-head"><div><span className="kicker">Creator Profile</span><h2>프로필 사진</h2></div><span className="admin-badge light">{photos.length} / 10장</span></div>
+    <p>사진은 가입 후에도 추가할 수 있습니다. 크리에이터 프로필과 갤러리에 공개됩니다.</p>
+    {photos.length > 0 && <div className="creator-photo-thumbnails">{photos.map((src, index) => <img key={`${src}-${index}`} src={src} alt={`프로필 사진 ${index + 1}`} loading="lazy" />)}</div>}
+    {remaining > 0 && <div className="creator-photo-upload"><label>사진 추가<input type="file" accept="image/*" multiple onChange={event => {
+      const selected = Array.from(event.target.files || []);
+      if (selected.length > remaining) {
+        setError(`현재 ${remaining}장까지 추가할 수 있습니다.`);
+        event.target.value = '';
+        return;
+      }
+      setError('');
+      setFiles(selected);
+    }} /></label><span>{files.length ? `${files.length}장 선택됨` : `최대 ${remaining}장 추가 가능`}</span><button className="solid-button" type="button" disabled={!files.length || busy} onClick={uploadPhotos}>{busy ? '업로드 중' : '사진 저장'}</button></div>}
+    {error && <p className="form-error">{error}</p>}
+  </section>;
+}
+
 function CreatorPayoutPanel({ session }: { session: Session }) {
-  const [data, setData] = useState<{ creator: { name: string; email: string; payoutAccount: string }; agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
+  const [data, setData] = useState<{ creator: { name: string; email: string; bankName: string; accountHolder: string; accountNumber: string; payoutAccount: string }; agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -1481,7 +1834,8 @@ function CreatorPayoutPanel({ session }: { session: Session }) {
   }
   const requested = data?.requests.filter(item => ['PENDING', 'APPROVED'].includes(item.status)).reduce((sum, item) => sum + item.amount, 0) || 0;
   const available = Math.max(0, (data?.agreement.amount || 0) - requested);
-  return <section className="admin-panel payout-panel"><div className="admin-panel-head"><div><span className="kicker">Creator Settlement</span><h2>약정 정산 및 출금 신청</h2></div><span className="admin-badge light">출금 가능 {available.toLocaleString()}원</span></div><p>관리자가 등록한 약정액 기준으로 출금 신청합니다. 실제 송금은 관리자 확인 후 진행됩니다.</p><div className="settings-metrics"><div><span>약정액</span><b>{(data?.agreement.amount || 0).toLocaleString()}원</b></div><div><span>신청 가능액</span><b>{available.toLocaleString()}원</b></div></div><div className="admin-form-grid"><label>출금 신청액<input type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} /></label><label>메모<input value={note} onChange={event => setNote(event.target.value)} placeholder="출금 메모" /></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-button" type="button" disabled={!amount || Number(amount) > available} onClick={requestPayout}>출금 신청</button>{data?.requests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>신청일</th><th>금액</th><th>상태</th></tr></thead><tbody>{data.requests.map(item => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.amount.toLocaleString()}원</td><td>{item.status}</td></tr>)}</tbody></table></div> : null}</section>;
+  const account = data?.creator.bankName ? `${data.creator.bankName} / ${data.creator.accountHolder} / ${data.creator.accountNumber}` : data?.creator.payoutAccount;
+  return <section className="admin-panel payout-panel"><div className="admin-panel-head"><div><span className="kicker">Creator Settlement</span><h2>약정 정산 및 출금 신청</h2></div><span className="admin-badge light">출금 가능 {available.toLocaleString()}원</span></div><p>등록 계좌: {account || '미등록'} · 관리자가 등록한 약정액 기준으로 출금 신청합니다. 실제 송금은 관리자 확인 후 진행됩니다.</p><div className="settings-metrics"><div><span>약정액</span><b>{(data?.agreement.amount || 0).toLocaleString()}원</b></div><div><span>신청 가능액</span><b>{available.toLocaleString()}원</b></div></div><div className="admin-form-grid"><label>출금 신청액<input type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} /></label><label>메모<input value={note} onChange={event => setNote(event.target.value)} placeholder="출금 메모" /></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-button" type="button" disabled={!amount || Number(amount) > available} onClick={requestPayout}>출금 신청</button>{data?.requests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>신청일</th><th>금액</th><th>상태</th></tr></thead><tbody>{data.requests.map(item => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.amount.toLocaleString()}원</td><td>{item.status}</td></tr>)}</tbody></table></div> : null}</section>;
 }
 
 function Admin({
@@ -1507,7 +1861,7 @@ function Admin({
   const [payoutAgreements, setPayoutAgreements] = useState<Array<{ creatorId: string; amount: number; note: string; updatedAt: string }>>([]);
   const [agreementCreatorId, setAgreementCreatorId] = useState('');
   const [agreementAmount, setAgreementAmount] = useState('');
-  const [members, setMembers] = useState<Array<{ email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }>>([]);
+  const [members, setMembers] = useState<Array<{ id: string; email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string; bankName?: string; accountHolder?: string; accountNumber?: string; instagramId?: string; dmAlertThreshold?: number; dmNotice?: string; reviewStatus?: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote?: string; reviewedAt?: string } }>>([]);
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
@@ -1561,7 +1915,7 @@ function Admin({
       return {
       ...creator,
       total,
-        payoutAccount: members.find(member => member.displayName === creator.displayName)?.application?.payoutAccount || '-',
+        payoutAccount: (() => { const application = members.find(member => member.displayName === creator.displayName)?.application; return application?.bankName ? `${application.bankName} / ${application.accountHolder || ''} / ${application.accountNumber || ''}` : application?.payoutAccount || '-'; })(),
         agreedAmount: payoutAgreements.find(item => item.creatorId === creator.id)?.amount || 0,
         commissionRate: feeRate,
         payoutRate: Math.max(0, 100 - feeRate),
@@ -1673,6 +2027,15 @@ function Admin({
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const response = await fetch(`${API}/api/admin/payout-requests/${id}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ status }) });
     if (response.ok) setPayoutRequests(prev => prev.map(item => item.id === id ? { ...item, status } : item));
+  }
+  async function reviewCreatorApplication(userId: string, status: 'PENDING' | 'APPROVED' | 'ON_HOLD', reviewNote: string) {
+    const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
+    const response = await fetch(`${API}/api/admin/creator-applications/${encodeURIComponent(userId)}/review`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` },
+      body: JSON.stringify({ status, reviewNote })
+    });
+    if (!response.ok) throw new Error('신청 상태를 저장하지 못했습니다. 관리자 로그인을 확인해 주세요.');
+    setMembers(prev => prev.map(member => member.id === userId ? { ...member, application: { ...member.application!, reviewStatus: status, reviewNote, reviewedAt: new Date().toISOString() } } : member));
   }
 
   return (
@@ -1938,7 +2301,7 @@ function Admin({
               </button>
             </div>
             <CreatorSignupTable creators={mergedCreators} />
-            <CreatorApplicationTable applications={members.filter(member => member.role === 'CREATOR' && member.application)} />
+            <CreatorApplicationTable applications={members.filter(member => member.role === 'CREATOR' && member.application)} onReview={reviewCreatorApplication} />
           </section>
           )}
 
@@ -2226,9 +2589,59 @@ function DmLogTable({
   );
 }
 
-function CreatorApplicationTable({ applications }: { applications: Array<{ email: string; displayName: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string } }> }) {
+function CreatorApplicationTable({
+  applications,
+  onReview
+}: {
+  applications: Array<{
+    id: string; email: string; displayName: string; createdAt: string;
+    application?: {
+      bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string;
+      bankName?: string; accountHolder?: string; accountNumber?: string;
+      instagramId?: string; dmAlertThreshold?: number; dmNotice?: string;
+      reviewStatus?: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote?: string; reviewedAt?: string;
+    };
+  }>;
+  onReview: (userId: string, status: 'PENDING' | 'APPROVED' | 'ON_HOLD', reviewNote: string) => Promise<void>;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, { status: 'PENDING' | 'APPROVED' | 'ON_HOLD'; note: string }>>({});
+  const [savingId, setSavingId] = useState('');
+  const [error, setError] = useState('');
+  function draftFor(item: (typeof applications)[number]) {
+    return drafts[item.id] || { status: item.application?.reviewStatus || 'PENDING', note: item.application?.reviewNote || '' };
+  }
+  async function save(item: (typeof applications)[number]) {
+    const draft = draftFor(item);
+    setSavingId(item.id);
+    setError('');
+    try { await onReview(item.id, draft.status, draft.note); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '상태를 저장하지 못했습니다.'); }
+    finally { setSavingId(''); }
+  }
   if (!applications.length) return <div className="empty-state">상세 프로필 신청서가 아직 없습니다.</div>;
-  return <div className="table-scroll"><table className="admin-table"><thead><tr><th>셀럽</th><th>자기소개</th><th>사진</th><th>인스타그램 동영상</th><th>정산 계좌</th></tr></thead><tbody>{applications.map(item => <tr key={item.email}><td><b>{item.displayName}</b><small>{item.email}</small></td><td>{item.application?.bio || '-'}</td><td>{item.application?.photoUrls.length || 0} / 10장</td><td>{item.application?.instagramVideoUrl ? <a href={item.application.instagramVideoUrl} target="_blank" rel="noreferrer">열기</a> : '-'}</td><td>{item.application?.payoutAccount || '-'}</td></tr>)}</tbody></table></div>;
+  return <div className="creator-applications">
+    {error && <p className="error-banner" role="alert">{error}</p>}
+    {applications.map(item => {
+      const app = item.application;
+      const draft = draftFor(item);
+      return <article className="creator-application" key={item.id}>
+        <header><div><b>{item.displayName}</b><small>{item.email} · 신청 {new Date(item.createdAt).toLocaleDateString('ko-KR')}</small></div><span className={`application-status ${draft.status.toLowerCase()}`}>{draft.status === 'APPROVED' ? '승인됨' : draft.status === 'ON_HOLD' ? '보류' : '검토 대기'}</span></header>
+        <p className="creator-application-bio">{app?.bio || '자기소개 없음'}</p>
+        <div className="application-facts">
+          <div className="application-bank"><small>정산 계좌</small>{app?.bankName ? <><span><b>은행명</b>{app.bankName}</span><span><b>예금주</b>{app.accountHolder || '미등록'}</span><span><b>계좌번호</b>{app.accountNumber || '미등록'}</span></> : <b>{app?.payoutAccount || '미등록'}</b>}</div>
+          <div><small>Instagram</small><b>{app?.instagramId ? `@${app.instagramId.replace(/^@/, '')}` : '미등록'}</b>{app?.instagramVideoUrl && <a href={app.instagramVideoUrl} target="_blank" rel="noreferrer">동영상 열기</a>}</div>
+          <div><small>DM 알림 기준</small><b>{(app?.dmAlertThreshold ?? 10000).toLocaleString()} 하트 이상</b></div>
+          <div><small>팬 알림 문구</small><b>{app?.dmNotice || '별도 문구 없음'}</b></div>
+        </div>
+        <div className="application-gallery">{(app?.photoUrls || []).map((url, index) => <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`} aria-label={`프로필 사진 ${index + 1} 보기`}><img src={url} alt={`프로필 사진 ${index + 1}`} /></a>)}</div>
+        <div className="application-review-controls">
+          <label>검토 상태<select value={draft.status} onChange={event => setDrafts(prev => ({ ...prev, [item.id]: { ...draft, status: event.target.value as typeof draft.status } }))}><option value="PENDING">검토 대기</option><option value="APPROVED">승인 및 공개</option><option value="ON_HOLD">보류 및 비공개</option></select></label>
+          <label>관리자 메모<input value={draft.note} maxLength={500} onChange={event => setDrafts(prev => ({ ...prev, [item.id]: { ...draft, note: event.target.value } }))} placeholder="검토 메모 (관리자 전용)" /></label>
+          <button type="button" className="solid-button" disabled={savingId === item.id} onClick={() => void save(item)}>{savingId === item.id ? '저장 중...' : '검토 저장'}</button>
+        </div>
+      </article>;
+    })}
+  </div>;
 }
 
 function CreatorSignupTable({
@@ -2315,6 +2728,7 @@ function PaymentResult({ orderId }: { orderId: string }) {
     {result?.status === 'PENDING_PAYMENT' && <p>아직 결제 완료가 확인되지 않았습니다. 재결제 전 주문 상태를 다시 확인해 주세요.</p>}
     {error && <p role="alert">{error}</p>}
     <button className="solid-button" disabled={loading} onClick={refresh}>{loading ? '확인 중' : '상태 새로고침'}</button>
+    <a className="ghost-button" href="#fan-dashboard">팬 페이지에서 메시지 확인</a>
     <a className="ghost-button" href="#home">홈으로</a>
   </section>;
 }

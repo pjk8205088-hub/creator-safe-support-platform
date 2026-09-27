@@ -63,6 +63,8 @@ export function installNicepay(app, deps) {
     app.post('/api/payments/checkout', wrap(async (req, res) => {
         ready();
         const user = await viewer(req);
+        if (user.role !== 'FAN')
+            throw new PaymentError('FAN_ONLY', 403);
         const parsed = z.object({ productId: z.string().min(1).max(100), creatorId: z.string().min(1).max(100), message: z.string().max(500).optional() }).safeParse(req.body);
         if (!parsed.success)
             throw new PaymentError('INVALID_ORDER');
