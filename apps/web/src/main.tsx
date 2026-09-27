@@ -137,6 +137,7 @@ const API =
 const LITTLY_CHECKOUT_URL =
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL : '') ||
   'https://litt.ly/eon8';
+const LITTLY_ADMIN_URL = 'https://app.litt.ly/page';
 const sessionKey = 'cssp-session';
 const supportKey = 'cssp-demo-supports';
 const walletKey = 'cssp-demo-point-wallet';
@@ -391,19 +392,6 @@ async function getJson<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
-function createDemoSession(name: string, email: string, role: 'FAN' | 'CREATOR' = 'CREATOR'): Session {
-  return {
-    token: `demo_${Date.now()}`,
-    user: {
-      id: `demo_${Date.now()}`,
-      name,
-      email,
-      role,
-      creatorSlug: role === 'CREATOR' ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : undefined
-    }
-  };
-}
-
 export function App() {
   const [verifiedAdmin, setVerifiedAdmin] = useState(false);
   const [page, setPage] = useState(location.hash.replace('#', '') || 'home');
@@ -498,7 +486,14 @@ export function App() {
   );
 
   function chargePoints(pointPackage: PointPackage) {
-    alert('결제 연동 점검 중입니다. 포인트 충전 및 결제는 진행되지 않았습니다.');
+    localStorage.setItem('cssp-littly-pending-order', JSON.stringify({
+      type: 'POINT_CHARGE',
+      packageId: pointPackage.id,
+      points: pointPackage.points,
+      amount: pointPackage.price,
+      createdAt: new Date().toISOString()
+    }));
+    window.location.assign(LITTLY_CHECKOUT_URL);
   }
 
   function beginCheckout(item: WishlistItem) {
@@ -1058,9 +1053,9 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>NICEPAY 카드 결제 후 주문 상태를 확인할 수 있습니다. 가맹점 연결이 준비되면 이용 가능합니다.</p>
+          <p>결제 버튼을 누르면 EON Korea 리틀리 결제 페이지가 열립니다.</p>
           <a className="solid-button" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">리틀리에서 결제하기</a>
-          <p>리틀리 결제 완료 후 주문번호를 관리자에게 전달하면 결제 내역을 확인할 수 있습니다. 리틀리 API/webhook 승인 정보가 등록되면 자동 반영으로 전환할 수 있습니다.</p>
+          <p>결제 완료 후 리틀리 주문번호를 보관해 주세요. 관리자가 결제 확인 후 포인트와 지급 예정액을 반영합니다.</p>
         </div>
       </div>
       <div className="checkout-layout">
@@ -1094,7 +1089,7 @@ function CheckoutPage({
           <label>
             결제수단
             <select value={provider} onChange={event => setProvider(event.target.value as 'NICEPAY')}>
-              <option value="NICEPAY">NICEPAY</option>
+              <option value="NICEPAY">리틀리 결제</option>
             </select>
           </label>
           <label>
@@ -1110,7 +1105,7 @@ function CheckoutPage({
             {draft.amount.toLocaleString()}원 리틀리에서 결제하기
           </a>
           <button className="ghost-button large" type="button" onClick={pay} disabled={busy}>
-            NICEPAY 연결 상태 확인
+            직접 PG 연결 상태 확인
           </button>
           <button className="ghost-button large" type="button" onClick={onCancel}>
             돌아가기
@@ -1140,14 +1135,14 @@ function WalletPage({ walletPoints, chargePoints }: { walletPoints: number; char
             <p>{pointPackage.description}</p>
             <b>{pointPackage.points.toLocaleString()}P · {pointPackage.price.toLocaleString()}원</b>
             <button className="solid-button" type="button" onClick={() => chargePoints(pointPackage)}>
-              충전 주문 미리보기
+              리틀리에서 {pointPackage.price.toLocaleString()}원 결제
             </button>
           </article>
         ))}
       </div>
       <div className="callout warning-callout">
         <b>리틀리 결제 연결</b>
-        <p>결제 버튼을 누르면 리틀리 결제 페이지로 이동합니다. 결제 완료 후 주문번호를 보관해 주세요. 자동 주문·포인트 반영은 리틀리의 API 또는 webhook 발급 후 서버 검증을 추가해야 합니다.</p>
+        <p>결제 버튼을 누르면 고객용 리틀리 결제 페이지로 이동합니다. 결제 완료 후 주문번호를 보관해 주세요. 관리자가 결제 내역을 확인한 뒤 포인트를 반영합니다.</p>
         <a className="ghost-button" href={LITTLY_CHECKOUT_URL} target="_blank" rel="noopener noreferrer">리틀리 결제 페이지 열기</a>
       </div>
     </section>
@@ -1237,7 +1232,7 @@ function AuthPage({
           return;
         }
         setBusy(false);
-        setError(response?.status === 401 ? '배포 보호 로그인 또는 관리자 인증 설정을 확인해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.');
+        setError(response?.status === 503 ? '로그인 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.');
         return;
       }
       setBusy(false);
@@ -1646,6 +1641,7 @@ function Admin({
           </a>
         </nav>
         <div className="admin-sidebar-foot">
+          <a href={LITTLY_ADMIN_URL} target="_blank" rel="noopener noreferrer">리틀리 결제 관리 열기</a>
           <span>AdminLTE 기반 운영 패널</span>
           <a href="https://github.com/ColorlibHQ/AdminLTE/releases" target="_blank" rel="noreferrer">
             Release notes

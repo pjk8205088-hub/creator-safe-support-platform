@@ -380,31 +380,29 @@ async function seedDatabase() {
     update: { displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' },
     create: { email: creatorEmail, displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' }
   });
-  await prisma.creatorProfile.upsert({
-    where: { slug: 'hong-gil-sun' },
-    update: {
-      userId: creatorUser.id,
-      displayName: '홍길순',
-      handle: '@hong.gilsun',
-      bio: 'EON Korea에서 팬들과 따뜻한 이야기를 나누는 크리에이터입니다.',
-      platform: 'Instagram',
-      avatarUrl: '/influencers/eon8-creator-luna.png',
-      coverUrl: '/influencers/eon8-creator-luna.png',
-      instagramId: 'hong-gil-sun'
-    },
-    create: {
-      userId: creatorUser.id,
-      slug: 'hong-gil-sun',
-      displayName: '홍길순',
-      handle: '@hong.gilsun',
-      bio: 'EON Korea에서 팬들과 따뜻한 이야기를 나누는 크리에이터입니다.',
-      category: 'creator',
-      platform: 'Instagram',
-      avatarUrl: '/influencers/eon8-creator-luna.png',
-      coverUrl: '/influencers/eon8-creator-luna.png',
-      instagramId: 'hong-gil-sun'
+  const creatorProfileData = {
+    displayName: '홍길순',
+    handle: '@hong.gilsun',
+    bio: 'EON Korea에서 팬들과 따뜻한 이야기를 나누는 크리에이터입니다.',
+    category: 'creator',
+    platform: 'Instagram',
+    avatarUrl: '/influencers/eon8-creator-luna.png',
+    coverUrl: '/influencers/eon8-creator-luna.png',
+    instagramId: 'hong-gil-sun'
+  };
+  const ownedCreatorProfile = await prisma.creatorProfile.findUnique({ where: { userId: creatorUser.id } });
+  if (ownedCreatorProfile) {
+    await prisma.creatorProfile.update({ where: { id: ownedCreatorProfile.id }, data: creatorProfileData });
+  } else {
+    const seededCreatorProfile = await prisma.creatorProfile.findUnique({ where: { slug: 'hong-gil-sun' } });
+    if (!seededCreatorProfile || !seededCreatorProfile.userId) {
+      await prisma.creatorProfile.upsert({
+        where: { slug: 'hong-gil-sun' },
+        update: { ...creatorProfileData, userId: creatorUser.id },
+        create: { ...creatorProfileData, userId: creatorUser.id, slug: 'hong-gil-sun' }
+      });
     }
-  });
+  }
   await prisma.user.upsert({
     where: { email: 'pjk8205088@gmail.com' },
     update: { displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' },
