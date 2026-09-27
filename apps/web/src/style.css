@@ -987,6 +987,30 @@ textarea {
   display: grid;
   gap: 16px;
   padding: 28px;
+  text-align: center;
+}
+
+.auth-card .eyebrow {
+  justify-content: center;
+}
+
+.auth-card label {
+  text-align: center;
+}
+
+.auth-card input,
+.auth-card textarea {
+  text-align: center;
+}
+
+.login-role-switch {
+  text-align: center;
+}
+
+.login-role-switch button,
+.login-role-switch a {
+  justify-content: center;
+  text-align: center;
 }
 
 .social-row {
