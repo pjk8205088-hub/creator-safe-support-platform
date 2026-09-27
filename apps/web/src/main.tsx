@@ -1219,13 +1219,14 @@ function AuthPage({
         }).catch(() => null).finally(() => window.clearTimeout(timeout));
         if (response?.ok) {
           const nextSession = (await response.json()) as Session;
-          if ((isAdminLogin && nextSession.user.role !== 'ADMIN') || (!isAdminLogin && loginAs !== nextSession.user.role)) {
+          const isAdminAccount = nextSession.user.role === 'ADMIN';
+          if ((isAdminLogin && !isAdminAccount) || (!isAdminLogin && !isAdminAccount && loginAs !== nextSession.user.role)) {
             setBusy(false);
             setError(isAdminLogin ? '관리자 계정만 관리자 페이지에 로그인할 수 있습니다.' : `${loginAs === 'FAN' ? '팬' : '인플루언서'} 계정으로 로그인해 주세요.`);
             return;
           }
           setSession(nextSession);
-          location.hash = isAdminLogin ? 'admin' : loginAs === 'CREATOR' ? 'dashboard' : 'home';
+          location.hash = isAdminAccount ? 'admin' : loginAs === 'CREATOR' ? 'dashboard' : 'home';
           return;
         }
         setBusy(false);
