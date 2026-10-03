@@ -10,7 +10,6 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
 import { installNicepay } from './nicepay-routes.js';
 import { nicepayConfig } from './nicepay.js';
@@ -84,16 +83,15 @@ const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
 app.use(express.json({ limit: '7mb' }));
-const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
-  ? new PrismaClient({
-      adapter: new PrismaLibSQL({
-        url: process.env.TURSO_DATABASE_URL,
-        authToken: process.env.TURSO_AUTH_TOKEN
-      })
-    })
-  : process.env.DATABASE_URL
-    ? new PrismaClient()
-    : null;
+const prisma = process.env.DATABASE_URL ? new PrismaClient() : null;
+const requireDatabase = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+
+app.use('/api', (req, res, next) => {
+  if (requireDatabase && !prisma && req.path !== '/health') {
+    return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED', message: '데이터베이스 연결 설정이 필요합니다.' });
+  }
+  next();
+});
 
 const categories: Category[] = [
   {
@@ -310,7 +308,20 @@ const paymentOrders: PaymentOrder[] = [];
 const adminCommissionRate = Number(process.env.ADMIN_COMMISSION_RATE ?? 25);
 const dbReady = () => prisma !== null;
 
-async function seedDatabase() {
+let databaseInitialization: Promise<void> | undefined;
+
+function seedDatabase(): Promise<void> {
+  if (!prisma) return Promise.resolve();
+  if (!databaseInitialization) {
+    databaseInitialization = initializeDatabase().catch(error => {
+      databaseInitialization = undefined;
+      throw error;
+    });
+  }
+  return databaseInitialization;
+}
+
+async function initializeDatabase() {
   if (!prisma) return;
   const catalogVersion = 'comic-public-v3';
   const catalogSetting = await prisma.adminSetting.findUnique({ where: { key: 'catalogVersion' } });
@@ -380,7 +391,7 @@ async function seedDatabase() {
   const creatorPasswordHash = await bcrypt.hash('1111', 12);
   const creatorUser = await prisma.user.upsert({
     where: { email: creatorEmail },
-    update: { displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' },
+    update: {},
     create: { email: creatorEmail, displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' }
   });
   const creatorProfileData = {
@@ -394,9 +405,7 @@ async function seedDatabase() {
     instagramId: 'hong-gil-sun'
   };
   const ownedCreatorProfile = await prisma.creatorProfile.findUnique({ where: { userId: creatorUser.id } });
-  if (ownedCreatorProfile) {
-    await prisma.creatorProfile.update({ where: { id: ownedCreatorProfile.id }, data: creatorProfileData });
-  } else {
+  if (!ownedCreatorProfile && creatorUser.role === 'CREATOR') {
     const seededCreatorProfile = await prisma.creatorProfile.findUnique({ where: { slug: 'hong-gil-sun' } });
     if (!seededCreatorProfile || !seededCreatorProfile.userId) {
       await prisma.creatorProfile.upsert({
@@ -406,10 +415,11 @@ async function seedDatabase() {
       });
     }
   }
+  const fanPasswordHash = await bcrypt.hash('1111', 12);
   await prisma.user.upsert({
     where: { email: 'pjk8205088@gmail.com' },
-    update: { displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' },
-    create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' }
+    update: {},
+    create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: fanPasswordHash, role: 'FAN' }
   });
   const adminEmail = (process.env.ADMIN_EMAIL ?? 'hspjjang@naver.com').trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? '1111';
@@ -417,7 +427,7 @@ async function seedDatabase() {
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     await prisma.user.upsert({
       where: { email: adminEmail },
-      update: { displayName: '관리자', passwordHash, role: 'ADMIN' },
+      update: {},
       create: { email: adminEmail, passwordHash, role: 'ADMIN', displayName: '관리자' }
     });
   }
@@ -667,7 +677,15 @@ function creatorSummary(creator: Creator) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
+app.get('/api/health', async (_req, res) => {
+  if (!prisma) return res.status(requireDatabase ? 503 : 200).json({ ok: !requireDatabase, service: 'creator-safe-support-api', database: 'not_configured' });
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true, service: 'creator-safe-support-api', database: 'connected' });
+  } catch {
+    res.status(503).json({ ok: false, service: 'creator-safe-support-api', database: 'unavailable' });
+  }
+});
 
 app.get('/api/categories', (_req, res) => {
   res.json(
@@ -990,7 +1008,6 @@ app.post('/api/auth/login', async (req, res) => {
         creatorSlug: undefined,
         createdAt: dbUser.createdAt.toISOString()
       };
-      users.push(user);
       return res.json(await issueSession(user));
     }).catch(() => res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' }));
   }

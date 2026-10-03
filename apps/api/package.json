@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma db push --accept-data-loss"
+    "prisma:migrate": "prisma db push"
   },
   "dependencies": {
     "@cssp/shared": "workspace:*",
