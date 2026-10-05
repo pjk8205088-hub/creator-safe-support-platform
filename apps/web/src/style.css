@@ -1998,3 +1998,16 @@ footer {
   }
 }
 }
+
+/* 2026 visual cleanup: calmer surfaces, consistent focus states, and safer mobile spacing */
+:root { color-scheme: light; }
+html { scroll-behavior: smooth; }
+body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid rgba(13,125,109,.35); outline-offset: 3px; }
+img { max-width: 100%; }
+@media (max-width: 560px) {
+  .section, .container { padding-left: 18px; padding-right: 18px; }
+  .hero p { max-width: 34rem; }
+  .card, .panel, .support-panel { border-radius: 16px; }
+}

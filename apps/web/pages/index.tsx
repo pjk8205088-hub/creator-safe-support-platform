@@ -9,8 +9,8 @@ export default function HomePage() {
   return (
     <>
       <Head>
-        <title>인플러언서 코리아</title>
-        <meta name="description" content="인플러언서와 팬이 포인트, DM, 디지털 콘텐츠로 소통하는 플랫폼" />
+        <title>EON Korea | 팬과 크리에이터를 안전하게 연결하는 플랫폼</title>
+        <meta name="description" content="팬과 크리에이터가 안전하게 소통하고 디지털 콘텐츠를 이용하는 EON Korea" />
       </Head>
       <InfluencerKorea />
     </>
