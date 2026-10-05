@@ -102,7 +102,7 @@ type Session = {
 type SupportForm = {
   supporterName: string;
   message: string;
-  paymentProvider: 'NICEPAY';
+  paymentProvider: 'LITTLY';
 };
 
 type PointPackage = {
@@ -122,7 +122,7 @@ type CheckoutDraft = {
   amount: number;
   message: string;
   supporterName: string;
-  paymentProvider: 'NICEPAY';
+  paymentProvider: 'LITTLY';
 };
 
 type PaymentOrderResponse = {
@@ -501,7 +501,7 @@ export function App() {
   const [supportForm, setSupportForm] = useState<SupportForm>({
     supporterName: '응원하는 팬',
     message: '늘 좋은 콘텐츠 고마워요!',
-    paymentProvider: 'NICEPAY'
+    paymentProvider: 'LITTLY'
   });
   const [checkoutDraft, setCheckoutDraft] = useState<CheckoutDraft | null>(null);
   const [walletPoints, setWalletPoints] = useState(readWalletPoints);
@@ -592,7 +592,7 @@ export function App() {
 
   function startCheckout(creator: Creator, item: WishlistItem, message: string, supporterName: string) {
     setCheckoutDraft({ creatorId: creator.id, creatorName: creator.displayName, creatorHandle: creator.handle,
-      wishlistItemId: item.id, itemTitle: item.title, amount: item.price, message, supporterName, paymentProvider: 'NICEPAY' });
+      wishlistItemId: item.id, itemTitle: item.title, amount: item.price, message, supporterName, paymentProvider: 'LITTLY' });
     location.hash = 'checkout';
   }
 
@@ -1222,7 +1222,7 @@ function CheckoutPage({
   onCancel: () => void;
   onComplete: (order: PaymentOrderResponse, support?: Support) => Promise<void> | void;
 }) {
-  const [provider, setProvider] = useState<'NICEPAY'>('NICEPAY');
+  const provider = 'LITTLY';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; message: string } | null>(null);
@@ -1260,7 +1260,7 @@ function CheckoutPage({
           throw new Error(failure.code === 'PG_NOT_READY' ? 'NICEPAY 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
         }
         const order = await response.json();
-        await openNicepay(order.checkout, setError);
+        localStorage.setItem('cssp-littly-pending-order', JSON.stringify({ ...payload, orderId: order.orderId, createdAt: new Date().toISOString() })); window.location.assign(LITTLY_CHECKOUT_URL);
         return;
       }
 
@@ -1325,7 +1325,7 @@ function CheckoutPage({
             <textarea value={draft.message} readOnly />
           </label>
           {error && <p className="form-error">{error}</p>}
-          <button className="solid-button large" type="button" onClick={pay} disabled={busy || !pgStatus?.ready}>
+          <button className="solid-button large" type="button" onClick={pay} disabled={busy}>
             {busy ? '결제창 연결 중...' : pgStatus?.ready ? `${draft.amount.toLocaleString()}원 NICEPAY 결제` : 'NICEPAY 연결 후 결제 가능'}
           </button>
           {!pgStatus?.ready && <p className="form-hint">PG 가맹점 설정이 완료되지 않아 결제를 시작할 수 없습니다.</p>}
