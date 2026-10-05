@@ -11,8 +11,8 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
-import { installNicepay } from './nicepay-routes.js';
-import { nicepayConfig } from './nicepay.js';
+import { installLittly } from './Littly-routes.js';
+import { LittlyConfig } from './Littly.js';
 
 type UserRole = 'FAN' | 'CREATOR' | 'ADMIN';
 type User = {
@@ -651,7 +651,7 @@ app.post('/api/payouts/requests', async (req, res) => {
   res.status(201).json(record);
 });
 
-installNicepay(app, { prisma, getUser: getUserFromRequest, getRate: getCommissionRate });
+installLittly(app, { prisma, getUser: getUserFromRequest, getRate: getCommissionRate });
 
 // Legacy mock-payment endpoints must never accept real orders.
 app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req, res, next) => {
@@ -660,8 +660,8 @@ app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req
 });
 
 app.get('/api/admin/pg-status', (_req, res) => {
-  const config = nicepayConfig();
-  res.json({ provider: 'NICEPAY', ready: config.ready && dbReady(), mode: config.mode,
+  const config = LittlyConfig();
+  res.json({ provider: 'Littly', ready: config.ready && dbReady(), mode: config.mode,
     credentialsConfigured: Boolean(config.clientId && config.secretKey),
     callbackUrl: config.origin ? `${config.origin}/api/payments/return` : null,
     webhookUrl: config.origin ? `${config.origin}/api/payments/webhook` : null,
@@ -1202,6 +1202,100 @@ app.post('/api/payments/confirm', async (req, res) => {
     payoutDestination: order.payoutDestination,
     payoutStatus: support.payoutStatus
   });
+});
+
+// ── Littly 결제 ──────────────────────────────────────────────
+app.post('/api/payments/littly-checkout', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'FAN') return res.status(403).json({ code: 'FAN_ONLY' });
+  const parsed = z.object({
+    creatorId: z.string(),
+    productId: z.string(),
+    supporterName: z.string().max(100),
+    message: z.string().max(500).optional().default(''),
+    amount: z.number().positive()
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR' });
+  const { creatorId, productId, supporterName, message, amount } = parsed.data;
+  const creator = creators.find(c => c.id === creatorId);
+  if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  const product = creator.wishlist.find(w => w.id === productId);
+  const commissionRate = await getCommissionRate();
+  const adminFee = Math.round((amount * commissionRate) / 100);
+  const creatorPayout = amount - adminFee;
+  const orderId = `ord_${nanoid(12)}`;
+  const order: PaymentOrder = {
+    id: orderId, creatorId, creatorName: creator.displayName, creatorHandle: creator.handle,
+    wishlistItemId: productId, supporterName, supporterId: user.id, supporterEmail: user.email,
+    message, amount, paymentProvider: 'LITTLY', paymentKey: `littly_${nanoid(8)}`,
+    status: 'PENDING_PAYMENT', adminFee, creatorPayout,
+    payoutDestination: 'ADMIN_DASHBOARD', payoutStatus: 'PENDING',
+    createdAt: new Date().toISOString()
+  };
+  if (dbReady()) {
+    await seedDatabase();
+    const dbCreator = await prisma!.creatorProfile.findFirst({ where: { slug: creator.slug } });
+    if (dbCreator) {
+      await prisma!.digitalOrder.create({ data: {
+        orderNo: orderId, fanId: user.id, creatorId: dbCreator.id,
+        productId: product ? productId : undefined,
+        pointAmount: amount, paymentProvider: 'LITTLY', paymentKey: order.paymentKey,
+        status: 'PENDING_PAYMENT', adminFee, creatorPayout,
+        payoutDestination: 'ADMIN_DASHBOARD', payoutStatus: 'PENDING',
+        message
+      }});
+    }
+  }
+  paymentOrders.unshift(order);
+  res.json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL || 'https://litt.ly/eon8' });
+});
+
+app.post('/api/admin/littly-confirm/:orderId', async (req, res) => {
+  const viewer = await getUserFromRequest(req);
+  if (!viewer || viewer.role !== 'ADMIN') return res.status(403).json({ code: 'FORBIDDEN' });
+  const { orderId } = req.params;
+  const now = new Date().toISOString();
+  if (dbReady()) {
+    const row = await prisma!.digitalOrder.findFirst({ where: { orderNo: orderId } });
+    if (!row) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+    if (row.status === 'PAID') return res.json({ orderId, status: 'PAID', message: 'already confirmed' });
+    await prisma!.digitalOrder.update({ where: { id: row.id }, data: { status: 'PAID', paidAt: new Date() } });
+    return res.json({ orderId, status: 'PAID', paidAt: now });
+  }
+  const order = paymentOrders.find(o => o.id === orderId);
+  if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+  if (order.status === 'PAID') return res.json({ orderId, status: 'PAID', message: 'already confirmed' });
+  order.status = 'PAID';
+  order.paidAt = now;
+  const support: Support = {
+    id: `sp_${nanoid(8)}`, creatorId: order.creatorId, creatorName: order.creatorName,
+    creatorHandle: order.creatorHandle, supporterName: order.supporterName, supporterId: order.supporterId,
+    supporterEmail: order.supporterEmail, message: order.message, amount: order.amount,
+    paymentProvider: 'LITTLY', paymentKey: order.paymentKey, adminFee: order.adminFee,
+    creatorPayout: order.creatorPayout, payoutDestination: order.payoutDestination,
+    payoutStatus: 'PENDING', status: 'PAID', createdAt: now
+  };
+  supports.unshift(support);
+  notifications.unshift({ id: `nt_${nanoid(8)}`, creatorId: order.creatorId, channel: 'LITTLY_PAYMENT',
+    title: 'Littly 결제가 확인되었습니다', body: `${order.supporterName}님의 ${order.amount.toLocaleString()}원 결제가 확인되었습니다.`, createdAt: now });
+  res.json({ orderId, status: 'PAID', paidAt: now, supportId: support.id });
+});
+
+app.get('/api/fan/pending-orders', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (dbReady()) {
+    const rows = await prisma!.digitalOrder.findMany({
+      where: { fanId: user.id, status: 'PENDING_PAYMENT' },
+      include: { creator: true, product: true },
+      orderBy: { createdAt: 'desc' }, take: 20
+    });
+    return res.json(rows.map((o: any) => ({
+      id: o.orderNo, creator: o.creator?.displayName, product: o.product?.title || '디지털 상품',
+      amount: o.pointAmount, status: o.status, createdAt: o.createdAt.toISOString()
+    })));
+  }
+  res.json(paymentOrders.filter(o => o.supporterId === user.id && o.status === 'PENDING_PAYMENT'));
 });
 
 app.get('/api/supports', async (_req, res) => {

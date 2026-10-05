@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
-import { openNicepay } from './nicepay';
+import { openLittly } from './Littly';
 import {
   BadgeCheck,
   BarChart3,
@@ -159,7 +159,7 @@ const businessInfo = {
   email: 'hspjjang@naver.com',
   mailOrderNumber: '2026-4791022-30-2-00060',
   hostingProvider: 'GitHub Pages',
-  pgProvider: 'NICEPAY'
+  pgProvider: 'LITTLY'
 };
 
 const demoCategories: Category[] = [
@@ -808,9 +808,9 @@ function ReviewReadySection() {
         </article>
         <article>
           <CreditCard size={22} />
-          <h3>NICEPAY 결제</h3>
+          <h3>Littly 결제</h3>
           <p>
-            PG사는 NICEPAY 기준으로 진행하고, 결제 승인과 상품 제공 관리를 운영 대시보드에서 확인합니다.
+            PG사는 Littly 기준으로 진행하고, 결제 승인과 상품 제공 관리를 운영 대시보드에서 확인합니다.
           </p>
         </article>
         <article>
@@ -843,7 +843,7 @@ function MvpSpecSection() {
           <ul>
             <li>카카오/네이버 간편 회원가입</li>
             <li>인플러언서와 소통형 콘텐츠 조회</li>
-            <li>NICEPAY 기반 간편결제</li>
+            <li>Littly 기반 간편결제</li>
             <li>메시지 카드 작성 및 전송</li>
           </ul>
         </article>
@@ -859,7 +859,7 @@ function MvpSpecSection() {
         <article>
           <h3>관리자 기능</h3>
           <ul>
-            <li>NICEPAY 결제 승인 및 입금 관리</li>
+            <li>Littly 결제 승인 및 입금 관리</li>
             <li>상품 제공 상태와 PG 연동 관리</li>
             <li>팬 등급 수동/자동 승급</li>
             <li>스팸 방지 필터와 DM 모니터링</li>
@@ -1033,7 +1033,7 @@ function FanPage({
   return <section className="page-shell fan-page">
     <div className="fan-profile-header"><div className="fan-profile-title"><span className="fan-profile-avatar" aria-hidden="true">{session.user.name.slice(0, 1)}</span><div><span className="kicker">My Fan Space</span><h1>{session.user.name}님의 팬 페이지</h1><p>{session.user.email}</p></div></div><a className="solid-button" href="#categories">셀럽 둘러보기 <ArrowRight size={16} /></a></div>
     <div className="fan-overview" aria-label="팬 활동 요약"><article><span>누적 결제액</span><b>{paidTotal.toLocaleString()}원</b><small>결제 완료된 주문 기준</small></article><article><span>결제 완료</span><b>{paidOrders.length}건</b><small>보낸 메시지 {paidOrders.filter(order => order.message).length}건</small></article><article><span>결제 확인 중</span><b>{pendingOrders.length}건</b><small>승인 결과에 따라 갱신됩니다.</small></article></div>
-    <div className={`fan-pg-status ${pg?.ready ? 'ready' : ''}`}><div><span className="kicker">NICEPAY · {pg?.mode || '연결 확인 중'}</span><b>{pg?.ready ? 'PG 결제 이용 가능' : 'PG 결제 준비 중'}</b><span>{pg?.ready ? pg.message : pg?.message || '결제 PG 연결 상태를 확인할 수 없습니다.'}</span></div><span className="pg-indicator" aria-label={pg?.ready ? 'PG 연결됨' : 'PG 미연결'} /></div>
+    <div className={`fan-pg-status ${pg?.ready ? 'ready' : ''}`}><div><span className="kicker">Littly · {pg?.mode || '연결 확인 중'}</span><b>{pg?.ready ? 'PG 결제 이용 가능' : 'PG 결제 준비 중'}</b><span>{pg?.ready ? pg.message : pg?.message || '결제 PG 연결 상태를 확인할 수 없습니다.'}</span></div><span className="pg-indicator" aria-label={pg?.ready ? 'PG 연결됨' : 'PG 미연결'} /></div>
     <div className="fan-page-grid">
       <article className="fan-message-compose">
         <span className="kicker">Message + Support</span><h2>셀럽에게 메시지 보내기</h2>
@@ -1041,10 +1041,10 @@ function FanPage({
         <label>메시지 이용권<select value={product?.id || ''} onChange={event => setProductId(event.target.value)}>{products.map(item => <option value={item.id} key={item.id}>{item.title} · {item.price.toLocaleString()}원</option>)}</select></label>
         <label>응원 메시지<textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={500} placeholder="결제 주문과 함께 셀럽에게 전달할 메시지를 적어 주세요." /></label>
         <div className="fan-message-footer"><small>{message.length}/500자 · 결제 주문 내역에 저장됩니다.</small><b>{product ? `${product.price.toLocaleString()}원` : '상품 없음'}</b></div>
-        <button className="solid-button large" type="button" disabled={!pg?.ready || !creator || !product || !message.trim()} onClick={() => creator && product && startCheckout(creator, product, message.trim(), session.user.name)}>{pg?.ready ? 'NICEPAY로 결제하고 메시지 보내기' : 'PG 연결 후 결제 가능'}</button>
+        <button className="solid-button large" type="button" disabled={!pg?.ready || !creator || !product || !message.trim()} onClick={() => creator && product && startCheckout(creator, product, message.trim(), session.user.name)}>{pg?.ready ? 'Littly로 결제하고 메시지 보내기' : 'PG 연결 후 결제 가능'}</button>
         <p className="form-hint">결제 완료된 주문의 메시지 내용이 내역에 남습니다. Instagram DM 자동 발송은 별도 Meta API 권한 및 연동 전까지 제공되지 않습니다.</p>
       </article>
-      <aside className="fan-page-help"><h2>결제 흐름</h2><ol><li>셀럽과 메시지 이용권을 선택합니다.</li><li>메시지를 작성하고 NICEPAY 결제를 진행합니다.</li><li>승인된 주문만 결제 완료로 기록되며, 아래 내역에서 확인할 수 있습니다.</li></ol><a href="#categories">셀럽 둘러보기 <ArrowRight size={16} /></a></aside>
+      <aside className="fan-page-help"><h2>결제 흐름</h2><ol><li>셀럽과 메시지 이용권을 선택합니다.</li><li>메시지를 작성하고 Littly 결제를 진행합니다.</li><li>승인된 주문만 결제 완료로 기록되며, 아래 내역에서 확인할 수 있습니다.</li></ol><a href="#categories">셀럽 둘러보기 <ArrowRight size={16} /></a></aside>
     </div>
     <section className="fan-orders"><div className="fan-order-heading"><div><span className="kicker">My messages & payments</span><h2>보낸 메시지 · 결제 내역</h2></div><span className="account-chip">전체 {orders.length}건</span></div>
       <div className="fan-order-filters" role="group" aria-label="결제 내역 필터">{([{ key: 'ALL', label: '전체' }, { key: 'PAID', label: '결제 완료' }, { key: 'PENDING', label: '확인 중' }, { key: 'REFUNDED', label: '환불' }] as const).map(item => <button key={item.key} type="button" className={orderFilter === item.key ? 'active' : ''} aria-pressed={orderFilter === item.key} onClick={() => setOrderFilter(item.key)}>{item.label}<span>{item.key === 'ALL' ? orders.length : item.key === 'PAID' ? paidOrders.length : item.key === 'PENDING' ? pendingOrders.length : refundedOrders.length}</span></button>)}</div>
@@ -1250,17 +1250,20 @@ function CheckoutPage({
       if (API) {
         const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
         if (!stored?.token) throw new Error('로그인 후 결제해 주세요.');
-        const response = await fetch(`${API}/api/payments/checkout`, {
+        const response = await fetch(`${API}/api/payments/littly-checkout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored.token}` },
           body: JSON.stringify(payload)
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.code === 'PG_NOT_READY' ? 'NICEPAY 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
+          throw new Error(failure.code === 'PG_NOT_READY' ? 'Littly 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
         }
         const order = await response.json();
-        localStorage.setItem('cssp-littly-pending-order', JSON.stringify({ ...payload, orderId: order.orderId, createdAt: new Date().toISOString() })); window.location.assign(LITTLY_CHECKOUT_URL);
+                const littlyOrder = await response.json();
+        localStorage.setItem('cssp-littly-pending-order', JSON.stringify({ ...payload, orderId: littlyOrder.orderId, createdAt: new Date().toISOString() }));
+        window.location.assign(littlyOrder.littlyUrl || LITTLY_CHECKOUT_URL);
+        return;
         return;
       }
 
@@ -1278,8 +1281,8 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>NICEPAY 카드 결제 승인 후 주문 상태가 확인됩니다.</p>
-          <span className={`fan-pg-inline ${pgStatus?.ready ? 'ready' : ''}`}>NICEPAY · {pgStatus?.mode || '상태 확인 중'} · {pgStatus?.message || 'PG 연결 상태를 확인할 수 없습니다.'}</span>
+          <p>Littly 카드 결제 승인 후 주문 상태가 확인됩니다.</p>
+          <span className={`fan-pg-inline ${pgStatus?.ready ? 'ready' : ''}`}>Littly · {pgStatus?.mode || '상태 확인 중'} · {pgStatus?.message || 'PG 연결 상태를 확인할 수 없습니다.'}</span>
         </div>
       </div>
       <div className="checkout-layout">
@@ -1312,8 +1315,8 @@ function CheckoutPage({
         <aside className="checkout-panel">
           <label>
             결제수단
-            <select value={provider} onChange={event => setProvider(event.target.value as 'NICEPAY')}>
-            <option value="NICEPAY">NICEPAY 카드</option>
+            <select value={provider} onChange={event => setProvider(event.target.value as 'Littly')}>
+            <option value="Littly">Littly 카드</option>
             </select>
           </label>
           <label>
@@ -1326,7 +1329,7 @@ function CheckoutPage({
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="solid-button large" type="button" onClick={pay} disabled={busy}>
-            {busy ? '결제창 연결 중...' : pgStatus?.ready ? `${draft.amount.toLocaleString()}원 NICEPAY 결제` : 'NICEPAY 연결 후 결제 가능'}
+            {busy ? '결제창 연결 중...' : pgStatus?.ready ? `${draft.amount.toLocaleString()}원 Littly 결제` : 'Littly 연결 후 결제 가능'}
           </button>
           {!pgStatus?.ready && <p className="form-hint">PG 가맹점 설정이 완료되지 않아 결제를 시작할 수 없습니다.</p>}
           <button className="ghost-button large" type="button" onClick={onCancel}>
@@ -2088,14 +2091,14 @@ function Admin({
       </aside>
 
       <div className="admin-main">
-        <p role="status">NICEPAY 키 발급 대기 · 결제/환불/자동 지급 미연결</p>
+        <p role="status">Littly 키 발급 대기 · 결제/환불/자동 지급 미연결</p>
         <a href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">연결된 리틀리 페이지 확인</a>
         {dataError && <p role="alert">{dataError}</p>}
         <header className="admin-topbar">
           <div>
             <span className="kicker">Admin</span>
             <h1>운영 관리</h1>
-            <p>NICEPAY 승인, 결제, 팬 회원가입, 인플러언서 가입리스트를 한 번에 관리합니다.</p>
+            <p>Littly 승인, 결제, 팬 회원가입, 인플러언서 가입리스트를 한 번에 관리합니다.</p>
           </div>
           <label className="admin-search">
             <Search size={16} />
@@ -2182,7 +2185,7 @@ function Admin({
                 <span className="kicker">결제 관리</span>
                 <h2>결제 및 정산 리스트</h2>
               </div>
-              <span className="admin-badge">NICEPAY</span>
+              <span className="admin-badge">Littly</span>
             </div>
             <PaymentTable supports={paymentRows} />
           </section>
@@ -2378,7 +2381,7 @@ function PaymentTable({ supports }: { supports: Support[] }) {
               <td>{support.amount.toLocaleString()}원</td>
               <td>{(support.adminFee ?? 0).toLocaleString()}원</td>
               <td>{(support.creatorPayout ?? support.amount).toLocaleString()}원</td>
-              <td>{support.paymentProvider ?? 'NICEPAY'}</td>
+              <td>{support.paymentProvider ?? 'Littly'}</td>
               <td>{support.status}</td>
             </tr>
           ))}
@@ -2852,7 +2855,7 @@ function PolicyPage() {
             수집한 정보는 서비스 제공과 법령상 보관 의무 이행 목적에 한해 사용합니다.
           </p>
           <p>
-            결제 처리는 NICEPAY 등 결제대행사를 통해 진행되며, 카드번호 등 민감 결제정보는 본 서비스가 직접 저장하지 않습니다.
+            결제 처리는 Littly 등 결제대행사를 통해 진행되며, 카드번호 등 민감 결제정보는 본 서비스가 직접 저장하지 않습니다.
           </p>
         </article>
         <article>
