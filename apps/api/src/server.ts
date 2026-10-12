@@ -89,7 +89,7 @@ const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
       url: process.env.TURSO_DATABASE_URL,
       authToken: process.env.TURSO_AUTH_TOKEN
     }) })
-  : process.env.DATABASE_URL?.startsWith('file:') ? new PrismaClient() : null;
+  : process.env.DATABASE_URL ? new PrismaClient() : null;
 const requireDatabase = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
 app.use('/api', (req, res, next) => {
