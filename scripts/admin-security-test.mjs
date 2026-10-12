@@ -52,6 +52,44 @@ try {
   assert.equal((await request('/api/auth/login', 'POST', { email: 'fan@test.example', password: 'test-password-123' })).status, 200);
   const stored = await db.execute("SELECT passwordHash FROM User WHERE email = 'fan@test.example'");
   assert.match(stored.rows[0].passwordHash, /^\$2/);
+  const creator = await request('/api/auth/signup', 'POST', {
+    name: 'Test Creator', email: 'creator@test.example', password: 'creator-password', role: 'CREATOR',
+    bio: 'My saved introduction', photoUrls: ['https://example.com/profile.webp'],
+    bankName: 'Test Bank', accountHolder: 'Test Creator', accountNumber: '123456789', instagramId: 'test.creator'
+  });
+  assert.equal(creator.status, 201);
+  assert.equal(creator.body.user.role, 'CREATOR');
+  const profile = await request('/api/creators/me/profile', 'GET', null, creator.body.token);
+  assert.equal(profile.status, 200);
+  assert.equal(profile.body.bio, 'My saved introduction');
+  assert.equal(profile.body.bankName, 'Test Bank');
+  assert.equal(profile.body.accountNumber, '123456789');
+  assert.equal((await request('/api/creators/me/profile', 'GET', null, fan.body.token)).status, 403);
+  assert.equal((await request('/api/creators/me/orders', 'GET', null, fan.body.token)).status, 403);
+  const creatorLogin = await request('/api/auth/login', 'POST', { email: 'creator@test.example', password: 'creator-password' });
+  assert.equal(creatorLogin.status, 200);
+  assert.equal(creatorLogin.body.user.id, creator.body.user.id);
+  assert.equal((await request('/api/creators/me/profile', 'GET', null, creatorLogin.body.token)).body.bio, 'My saved introduction');
+  const creatorProfile = await db.execute({ sql: 'SELECT id FROM CreatorProfile WHERE userId = ?', args: [creator.body.user.id] });
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: 'INSERT INTO DigitalOrder (id, orderNo, creatorId, fanId, purchaserName, purchaserEmail, message, pointAmount, paymentProvider, paymentKey, status, commissionRate, adminFee, creatorPayout, payoutStatus, paidAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    args: ['test-order-id', 'test-order-no', creatorProfile.rows[0].id, fan.body.user.id, 'Test Fan', 'fan@test.example', 'Test support message', 10000, 'NICEPAY', 'test-payment-key', 'PAID', 25, 2500, 7500, 'PENDING', now, now, now]
+  });
+  const creatorOrders = await request('/api/creators/me/orders', 'GET', null, creatorLogin.body.token);
+  assert.equal(creatorOrders.status, 200);
+  assert.equal(creatorOrders.body.length, 1);
+  assert.equal(creatorOrders.body[0].fanName, 'Test Fan');
+  assert.equal(creatorOrders.body[0].creatorPayout, 7500);
+  const fanOrders = await request('/api/fan/orders', 'GET', null, fan.body.token);
+  assert.equal(fanOrders.status, 200);
+  assert.equal(fanOrders.body[0].message, 'Test support message');
+  const adminPayments = await request('/api/admin/payments', 'GET', null, admin.body.token);
+  assert.equal(adminPayments.status, 200);
+  assert.equal(adminPayments.body[0].amount, 10000);
+  const wallets = await db.execute({ sql: 'SELECT balance FROM PointWallet WHERE userId IN (?, ?)', args: [fan.body.user.id, creator.body.user.id] });
+  assert.equal(wallets.rows.length, 2);
+  assert.ok(wallets.rows.every(row => row.balance === 0));
   assert.equal((await request('/api/auth/signup', 'POST', { name: 'Fake Admin', email: 'evil@test.example', password: 'test-password-123', role: 'ADMIN' })).status, 400);
   for (const path of ['/api/payments/orders', '/api/payments/confirm', '/api/supports']) {
     assert.equal((await request(path, 'POST', { orderId: 'fake', paymentKey: 'fake' })).status, 503);
@@ -59,7 +97,7 @@ try {
   assert.equal((await request('/api/admin/pg-status', 'GET', null, admin.body.token)).body.ready, false);
   await request('/api/auth/logout', 'POST', {}, admin.body.token);
   assert.equal((await request('/api/auth/me', 'GET', null, admin.body.token)).status, 401);
-  console.log('PASS: admin authorization, signup hashing, persistent sessions, logout, invalid credentials, PG fail-closed.');
+  console.log('PASS: fan/creator signup, profile and wallet persistence, role access, support history, admin monitoring, sessions, logout, invalid credentials, PG fail-closed.');
 } finally {
   await new Promise(resolve => server.close(resolve));
   db.close();

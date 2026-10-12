@@ -6,6 +6,7 @@ packages/*/node_modules/
 dist/.vite/
 apps/web/.next/
 apps/web/next-dist/
+*.tsbuildinfo
 *.log
 .env
 .env.local

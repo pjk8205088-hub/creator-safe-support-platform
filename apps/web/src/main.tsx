@@ -1683,6 +1683,8 @@ function CreatorDashboard({ session }: { session: Session }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [orders, setOrders] = useState<Array<{ id: string; fanName: string; fanEmail: string; product: string; message: string; amount: number; adminFee: number; creatorPayout: number; status: string; payoutStatus: string; createdAt: string; paidAt: string | null }>>([]);
+  const [ordersError, setOrdersError] = useState('');
   const loadProfile = () => fetch(`${API}/api/creators/me/profile`, { headers: { Authorization: `Bearer ${session.token}` } })
     .then(async response => {
       if (!response.ok) throw new Error('셀럽 상세 정보를 불러오지 못했습니다. 다시 로그인해 주세요.');
@@ -1690,7 +1692,15 @@ function CreatorDashboard({ session }: { session: Session }) {
       setProfile(result);
       setDraft(result);
     });
-  useEffect(() => { loadProfile().catch(reason => setError(reason instanceof Error ? reason.message : '정보를 불러오지 못했습니다.')); }, [session.token]);
+  useEffect(() => {
+    loadProfile().catch(reason => setError(reason instanceof Error ? reason.message : '정보를 불러오지 못했습니다.'));
+    fetch(`${API}/api/creators/me/orders`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('후원 내역을 불러오지 못했습니다.');
+        setOrders(await response.json());
+      })
+      .catch(reason => setOrdersError(reason instanceof Error ? reason.message : '후원 내역을 불러오지 못했습니다.'));
+  }, [session.token]);
   const setField = <K extends keyof CreatorProfileDraft>(key: K, value: CreatorProfileDraft[K]) => setDraft(current => current ? { ...current, [key]: value } : current);
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
@@ -1740,9 +1750,27 @@ function CreatorDashboard({ session }: { session: Session }) {
           <button className="solid-button" type="submit" disabled={busy}>{busy ? '저장 중' : '프로필 저장'}</button>
         </form>
         <CreatorPhotoManager session={session} />
+        <CreatorOrderHistory orders={orders} error={ordersError} />
       </div>
       <aside className="creator-dashboard-side"><CreatorPayoutPanel session={session} /><div className="creator-side-note"><span className="kicker">Visibility</span><h2>공개 범위</h2><p>자기소개와 프로필 사진은 승인 후 팬에게 공개됩니다. 계좌번호, 로그인 이메일, 관리자 검토 메모는 공개 프로필에 표시되지 않습니다.</p><a href="#home">홈페이지 보기 <ArrowRight size={15} /></a></div></aside>
     </div>
+  </section>;
+}
+
+type CreatorOrderHistoryItem = {
+  id: string; fanName: string; fanEmail: string; product: string; message: string;
+  amount: number; adminFee: number; creatorPayout: number; status: string;
+  payoutStatus: string; createdAt: string; paidAt: string | null;
+};
+
+function CreatorOrderHistory({ orders, error }: { orders: CreatorOrderHistoryItem[]; error: string }) {
+  const paid = orders.filter(order => order.status === 'PAID');
+  const paidTotal = paid.reduce((sum, order) => sum + order.amount, 0);
+  const payoutTotal = paid.reduce((sum, order) => sum + order.creatorPayout, 0);
+  return <section className="admin-panel creator-order-history">
+    <div className="admin-panel-head"><div><span className="kicker">Support history</span><h2>후원·정산 히스토리</h2></div><span className="admin-badge light">결제 완료 {paid.length}건</span></div>
+    <div className="settings-metrics"><div><span>결제 완료 금액</span><b>{paidTotal.toLocaleString()}원</b></div><div><span>지급 예정액</span><b>{payoutTotal.toLocaleString()}원</b></div></div>
+    {error ? <p className="form-error">{error}</p> : orders.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>팬</th><th>상품·메시지</th><th>결제액</th><th>수수료</th><th>지급 예정액</th><th>상태</th><th>일시</th></tr></thead><tbody>{orders.map(order => <tr key={order.id}><td><b>{order.fanName}</b><small>{order.fanEmail}</small></td><td><b>{order.product}</b><small>{order.message || '메시지 없음'}</small></td><td>{order.amount.toLocaleString()}원</td><td>{order.adminFee.toLocaleString()}원</td><td>{order.creatorPayout.toLocaleString()}원</td><td>{order.status === 'PAID' ? `결제 완료 · ${order.payoutStatus}` : order.status}</td><td>{new Date(order.createdAt).toLocaleString('ko-KR')}</td></tr>)}</tbody></table></div> : <div className="empty-state">아직 후원 내역이 없습니다.</div>}
   </section>;
 }
 
@@ -1859,6 +1887,7 @@ function Admin({
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
   const [dataError, setDataError] = useState('');
+  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; credentialsConfigured: boolean; callbackUrl: string | null; webhookUrl: string | null } | null>(null);
   const [littlyEmails, setLittlyEmails] = useState<Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }>>([]);
   const [payoutRequests, setPayoutRequests] = useState<Array<{ id: string; creatorId: string; amount: number; status: string; note: string; createdAt: string }>>([]);
   const [payoutAgreements, setPayoutAgreements] = useState<Array<{ creatorId: string; amount: number; note: string; updatedAt: string }>>([]);
@@ -1868,11 +1897,11 @@ function Admin({
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
-    Promise.all(['/api/admin/users', '/api/admin/settings', '/api/admin/littly-payment-emails'].map(async path => {
+    Promise.all(['/api/admin/users', '/api/admin/settings', '/api/admin/littly-payment-emails', '/api/admin/pg-status'].map(async path => {
       const response = await fetch(`${API}${path}`, { headers });
       if (!response.ok) throw new Error('관리자 데이터를 불러올 수 없습니다. 다시 로그인해 주세요.');
       return response.json();
-    })).then(([users, settings, emails]) => { setMembers(users); setFeeRate(settings.commissionRate); setLittlyEmails(emails); return Promise.all([fetch(`${API}/api/admin/payout-requests`, { headers }), fetch(`${API}/api/admin/payout-agreements`, { headers })]); })
+    })).then(([users, settings, emails, pg]) => { setMembers(users); setFeeRate(settings.commissionRate); setLittlyEmails(emails); setPgStatus(pg); return Promise.all([fetch(`${API}/api/admin/payout-requests`, { headers }), fetch(`${API}/api/admin/payout-agreements`, { headers })]); })
       .then(async ([requestsResponse, agreementsResponse]) => { setPayoutRequests(await requestsResponse.json()); setPayoutAgreements(await agreementsResponse.json()); })
       .catch(error => setDataError(error.message));
   }, []);

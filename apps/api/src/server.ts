@@ -9,7 +9,8 @@ import helmet from 'helmet';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
 import { installLittly } from './Littly-routes.js';
 import { LittlyConfig } from './Littly.js';
@@ -83,7 +84,12 @@ const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
 app.use(express.json({ limit: '7mb' }));
-const prisma = process.env.DATABASE_URL ? new PrismaClient() : null;
+const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
+  ? new PrismaClient({ adapter: new PrismaLibSQL({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN
+    }) })
+  : process.env.DATABASE_URL?.startsWith('file:') ? new PrismaClient() : null;
 const requireDatabase = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
 app.use('/api', (req, res, next) => {
@@ -541,10 +547,10 @@ function publicUser(user: User) {
   return safe;
 }
 
-async function issueSession(user: User) {
+async function issueSession(user: User, database: Prisma.TransactionClient | PrismaClient | null = prisma) {
   const token = `dev_${nanoid(32)}`;
-  if (prisma) {
-    await prisma.adminSetting.create({ data: {
+  if (database) {
+    await database.adminSetting.create({ data: {
       key: sessionStorageKey(token),
       value: JSON.stringify({ userId: user.id, expiresAt: Date.now() + 8 * 60 * 60 * 1000 })
     } });
@@ -911,6 +917,7 @@ app.post('/api/auth/signup', async (req, res) => {
   const input = parsed.data;
   const email = input.email.toLowerCase();
   if (dbReady()) {
+    try {
     await seedDatabase();
     const exists = await prisma!.user.findUnique({ where: { email } });
     if (exists) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
@@ -919,18 +926,20 @@ app.post('/api/auth/signup', async (req, res) => {
       ? (input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? creatorPhotoUrl(userId, index) : photo)
       : [];
     const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const user = await prisma!.user.create({
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const session = await prisma!.$transaction(async tx => {
+    const user = await tx.user.create({
       data: {
         id: userId,
         email,
         displayName: input.name,
-        passwordHash: await bcrypt.hash(input.password, 12),
+        passwordHash,
         role: input.role,
         ...(input.role === 'CREATOR'
           ? {
               creatorProfile: {
                 create: {
-                  slug: requestedSlug || `creator-${nanoid(5)}`,
+                  slug: requestedSlug ? `${requestedSlug}-${nanoid(8)}` : `creator-${nanoid(12)}`,
                   displayName: input.name,
                   handle: `@${requestedSlug || input.name}`,
                   bio: input.bio || 'EON Korea 크리에이터입니다.',
@@ -947,7 +956,9 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     });
     if (input.role === 'CREATOR') {
-      await Promise.all((input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? saveCreatorPhoto(user.id, index, photo) : Promise.resolve()));
+      for (const [index, photo] of (input.photoUrls || []).entries()) {
+        if (isWebpDataUrl(photo)) await tx.adminSetting.create({ data: { key: creatorPhotoKey(user.id, index), value: photo } });
+      }
       const applicationValue = JSON.stringify({
         bio: input.bio || '', photoUrls, instagramVideoUrl: input.instagramVideoUrl || '',
         bankName: input.bankName || '', accountHolder: input.accountHolder || '', accountNumber: input.accountNumber || '',
@@ -955,13 +966,22 @@ app.post('/api/auth/signup', async (req, res) => {
         dmAlertThreshold: input.dmAlertThreshold ?? 10000, dmNotice: input.dmNotice || '',
         reviewStatus: 'PENDING', reviewNote: '', registeredAt: new Date().toISOString()
       });
-      await prisma!.adminSetting.upsert({
+      await tx.adminSetting.upsert({
         where: { key: `creatorApplication:${user.id}` },
         update: { value: applicationValue },
         create: { key: `creatorApplication:${user.id}`, value: applicationValue }
       });
     }
-    return res.status(201).json(await issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() }));
+    await tx.pointWallet.create({ data: { userId: user.id, balance: 0 } });
+    return issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() }, tx);
+    }, { timeout: 15000 });
+    return res.status(201).json(session);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+        return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
+      }
+      return res.status(503).json({ code: 'SIGNUP_SERVICE_UNAVAILABLE', message: '가입 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.' });
+    }
   }
   if (users.some(user => user.email === email)) return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
 
@@ -1357,6 +1377,34 @@ app.get('/api/fan/orders', async (req, res) => {
     id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
     message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
     status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null
+  })));
+});
+app.get('/api/creators/me/orders', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  if (user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  if (!dbReady()) return res.json([]);
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const rows = await prisma!.digitalOrder.findMany({
+    where: { creatorId: creator.id },
+    include: { fan: true, product: true },
+    orderBy: { createdAt: 'desc' },
+    take: 200
+  });
+  res.json(rows.map(order => ({
+    id: order.orderNo,
+    fanName: order.fan?.displayName || order.purchaserName,
+    fanEmail: order.fan?.email || order.purchaserEmail || '',
+    product: order.product?.title || '후원',
+    message: order.message || '',
+    amount: order.pointAmount,
+    adminFee: order.adminFee,
+    creatorPayout: order.creatorPayout,
+    status: order.status,
+    payoutStatus: order.payoutStatus,
+    createdAt: order.createdAt.toISOString(),
+    paidAt: order.paidAt?.toISOString() || null
   })));
 });
 app.get('/api/admin/users', async (_req, res) => {
