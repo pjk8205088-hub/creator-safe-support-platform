@@ -12,8 +12,6 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
-import { installLittly } from './Littly-routes.js';
-import { LittlyConfig } from './Littly.js';
 
 type UserRole = 'FAN' | 'CREATOR' | 'ADMIN';
 type User = {
@@ -705,8 +703,6 @@ app.post('/api/payouts/requests', async (req, res) => {
   res.status(201).json(record);
 });
 
-installLittly(app, { prisma, getUser: getUserFromRequest, getRate: getCommissionRate });
-
 // Legacy mock-payment endpoints must never accept real orders.
 app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req, res, next) => {
   if (req.method === 'POST') return res.status(503).json({ code: 'PG_NOT_READY', message: '결제 연동 점검 중입니다. 결제 및 포인트 지급은 진행되지 않습니다.' });
@@ -714,11 +710,11 @@ app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req
 });
 
 app.get('/api/admin/pg-status', (_req, res) => {
-  const config = LittlyConfig();
-  res.json({ provider: 'Littly', ready: config.ready && dbReady(), mode: config.mode,
-    credentialsConfigured: Boolean(config.clientId && config.secretKey),
-    callbackUrl: config.origin ? `${config.origin}/api/payments/return` : null,
-    webhookUrl: config.origin ? `${config.origin}/api/payments/webhook` : null,
+  const checkoutUrl = process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL || process.env.LITTLY_CHECKOUT_URL || 'https://litt.ly/eon8';
+  res.json({ provider: 'Littly', ready: Boolean(checkoutUrl) && dbReady(), mode: 'LINK_CHECKOUT',
+    credentialsConfigured: Boolean(checkoutUrl),
+    callbackUrl: null,
+    webhookUrl: null,
     checkoutVerified: false, refundVerified: false, payoutEnabled: false });
 });
 
@@ -1311,9 +1307,9 @@ app.post('/api/payments/littly-checkout', async (req, res) => {
       await prisma!.digitalOrder.create({ data: {
         orderNo: orderId, fanId: user.id, creatorId: dbCreator.id,
         productId: product ? productId : undefined,
+        purchaserName: supporterName, purchaserEmail: user.email,
         pointAmount: amount, paymentProvider: 'LITTLY', paymentKey: order.paymentKey,
-        status: 'PENDING_PAYMENT', adminFee, creatorPayout,
-        payoutDestination: 'ADMIN_DASHBOARD', payoutStatus: 'PENDING',
+        status: 'PENDING_PAYMENT', adminFee, creatorPayout, payoutStatus: 'PENDING',
         message
       }});
     }

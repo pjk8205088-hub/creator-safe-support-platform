@@ -1,5 +1,4 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
-import { openLittly } from './Littly';
 import {
   BadgeCheck,
   BarChart3,
@@ -1284,11 +1283,9 @@ function CheckoutPage({
           const failure = await response.json().catch(() => ({}));
           throw new Error(failure.code === 'PG_NOT_READY' ? 'Littly 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
         }
-        const order = await response.json();
-                const littlyOrder = await response.json();
+        const littlyOrder = await response.json();
         localStorage.setItem('cssp-littly-pending-order', JSON.stringify({ ...payload, orderId: littlyOrder.orderId, createdAt: new Date().toISOString() }));
         window.location.assign(littlyOrder.littlyUrl || LITTLY_CHECKOUT_URL);
-        return;
         return;
       }
 
@@ -1340,8 +1337,8 @@ function CheckoutPage({
         <aside className="checkout-panel">
           <label>
             결제수단
-            <select value={provider} onChange={event => setProvider(event.target.value as 'Littly')}>
-            <option value="Littly">Littly 카드</option>
+            <select value={provider} disabled>
+            <option value="LITTLY">Littly 카드</option>
             </select>
           </label>
           <label>
