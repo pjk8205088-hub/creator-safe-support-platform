@@ -19,15 +19,18 @@ app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? '*' }));
 app.use(express.json({ limit: '7mb' }));
 const prisma = process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN
-    ? new PrismaClient({
-        adapter: new PrismaLibSQL({
+    ? new PrismaClient({ adapter: new PrismaLibSQL({
             url: process.env.TURSO_DATABASE_URL,
             authToken: process.env.TURSO_AUTH_TOKEN
-        })
-    })
-    : process.env.DATABASE_URL
-        ? new PrismaClient()
-        : null;
+        }) })
+    : process.env.DATABASE_URL ? new PrismaClient() : null;
+const requireDatabase = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+app.use('/api', (req, res, next) => {
+    if (requireDatabase && !prisma && req.path !== '/health') {
+        return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED', message: '데이터베이스 연결 설정이 필요합니다.' });
+    }
+    next();
+});
 const categories = [
     {
         id: 'digital-content',
@@ -230,6 +233,7 @@ const users = [
 const sessions = new Map();
 const creatorGalleryFallback = new Map();
 const creatorPhotoFallback = new Map();
+const creatorApplicationFallback = new Map();
 const supports = [];
 const notifications = [];
 const paymentEmailEvents = [];
@@ -238,7 +242,19 @@ const payoutRequests = [];
 const paymentOrders = [];
 const adminCommissionRate = Number(process.env.ADMIN_COMMISSION_RATE ?? 25);
 const dbReady = () => prisma !== null;
-async function seedDatabase() {
+let databaseInitialization;
+function seedDatabase() {
+    if (!prisma)
+        return Promise.resolve();
+    if (!databaseInitialization) {
+        databaseInitialization = initializeDatabase().catch(error => {
+            databaseInitialization = undefined;
+            throw error;
+        });
+    }
+    return databaseInitialization;
+}
+async function initializeDatabase() {
     if (!prisma)
         return;
     const catalogVersion = 'comic-public-v3';
@@ -308,7 +324,7 @@ async function seedDatabase() {
     const creatorPasswordHash = await bcrypt.hash('1111', 12);
     const creatorUser = await prisma.user.upsert({
         where: { email: creatorEmail },
-        update: { displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' },
+        update: {},
         create: { email: creatorEmail, displayName: '홍길순', passwordHash: creatorPasswordHash, role: 'CREATOR' }
     });
     const creatorProfileData = {
@@ -322,10 +338,7 @@ async function seedDatabase() {
         instagramId: 'hong-gil-sun'
     };
     const ownedCreatorProfile = await prisma.creatorProfile.findUnique({ where: { userId: creatorUser.id } });
-    if (ownedCreatorProfile) {
-        await prisma.creatorProfile.update({ where: { id: ownedCreatorProfile.id }, data: creatorProfileData });
-    }
-    else {
+    if (!ownedCreatorProfile && creatorUser.role === 'CREATOR') {
         const seededCreatorProfile = await prisma.creatorProfile.findUnique({ where: { slug: 'hong-gil-sun' } });
         if (!seededCreatorProfile || !seededCreatorProfile.userId) {
             await prisma.creatorProfile.upsert({
@@ -335,10 +348,11 @@ async function seedDatabase() {
             });
         }
     }
+    const fanPasswordHash = await bcrypt.hash('1111', 12);
     await prisma.user.upsert({
         where: { email: 'pjk8205088@gmail.com' },
-        update: { displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' },
-        create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: await bcrypt.hash('1111', 12), role: 'FAN' }
+        update: {},
+        create: { email: 'pjk8205088@gmail.com', displayName: '홍길동', passwordHash: fanPasswordHash, role: 'FAN' }
     });
     const adminEmail = (process.env.ADMIN_EMAIL ?? 'hspjjang@naver.com').trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD ?? '1111';
@@ -346,7 +360,7 @@ async function seedDatabase() {
         const passwordHash = await bcrypt.hash(adminPassword, 12);
         await prisma.user.upsert({
             where: { email: adminEmail },
-            update: { displayName: '관리자', passwordHash, role: 'ADMIN' },
+            update: {},
             create: { email: adminEmail, passwordHash, role: 'ADMIN', displayName: '관리자' }
         });
     }
@@ -382,6 +396,49 @@ function dbCreatorSummary(creator, galleryImages = []) {
         })),
         category: categories.find(category => category.id === creator.category)
     };
+}
+async function readJsonSetting(key, fallback) {
+    if (!dbReady())
+        return fallback;
+    const row = await prisma.adminSetting.findUnique({ where: { key } });
+    if (!row)
+        return fallback;
+    try {
+        return JSON.parse(row.value);
+    }
+    catch {
+        return fallback;
+    }
+}
+async function writeJsonSetting(key, value) {
+    if (!dbReady())
+        throw new Error('DATABASE_REQUIRED');
+    const serialized = JSON.stringify(value);
+    await prisma.adminSetting.upsert({ where: { key }, update: { value: serialized }, create: { key, value: serialized } });
+}
+const creatorExtrasKey = (userId) => `creatorExtras:${userId}`;
+const productMetaKey = (productId) => `productMeta:${productId}`;
+const fanPreferenceKey = (creatorId, fanId) => `fanPreference:${creatorId}:${fanId}`;
+const bankVerificationKey = (userId) => `bankVerified:${userId}`;
+async function queueIntegration(channel, body, creatorId, meta = {}) {
+    const id = `notice-${nanoid(12)}`;
+    const webhook = channel === 'KAKAO' ? process.env.KAKAO_NOTIFICATION_WEBHOOK_URL : process.env.X_POST_WEBHOOK_URL;
+    const record = { id, channel, creatorId, body, meta, status: webhook ? 'SENDING' : 'WAITING_FOR_CONNECTION', createdAt: new Date().toISOString() };
+    await writeJsonSetting(`notificationOutbox:${id}`, record);
+    if (!webhook)
+        return record;
+    try {
+        const response = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) });
+        record.status = response.ok ? 'SENT' : 'FAILED';
+        record.responseStatus = response.status;
+    }
+    catch (error) {
+        record.status = 'FAILED';
+        record.error = error instanceof Error ? error.message : 'WEBHOOK_FAILED';
+    }
+    record.updatedAt = new Date().toISOString();
+    await writeJsonSetting(`notificationOutbox:${id}`, record);
+    return record;
 }
 function dbOrderToSupport(order) {
     return {
@@ -452,10 +509,10 @@ function publicUser(user) {
     const { password, ...safe } = user;
     return safe;
 }
-async function issueSession(user) {
+async function issueSession(user, database = prisma) {
     const token = `dev_${nanoid(32)}`;
-    if (prisma) {
-        await prisma.adminSetting.create({ data: {
+    if (database) {
+        await database.adminSetting.create({ data: {
                 key: sessionStorageKey(token),
                 value: JSON.stringify({ userId: user.id, expiresAt: Date.now() + 8 * 60 * 60 * 1000 })
             } });
@@ -558,7 +615,12 @@ app.get('/api/payouts/me', async (req, res) => {
     catch {
         payout = {};
     }
-    res.json({ creator: { name: user.name, email: user.email, bankName: payout.bankName || '', accountHolder: payout.accountHolder || '', accountNumber: payout.accountNumber || '', payoutAccount: payout.payoutAccount || '' }, agreement, requests });
+    const creatorProfile = dbReady() ? await prisma.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+    const paidOrders = creatorProfile && dbReady() ? await prisma.digitalOrder.findMany({ where: { creatorId: creatorProfile.id, status: 'PAID' } }) : [];
+    const earnings = paidOrders.reduce((sum, order) => sum + order.creatorPayout, 0);
+    const committed = requests.filter(item => ['PENDING', 'APPROVED', 'PAID'].includes(item.status)).reduce((sum, item) => sum + item.amount, 0);
+    const bankVerified = await readJsonSetting(bankVerificationKey(user.id), false);
+    res.json({ creator: { name: user.name, email: user.email, bankName: payout.bankName || '', accountHolder: payout.accountHolder || '', accountNumber: payout.accountNumber || '', payoutAccount: payout.payoutAccount || '' }, agreement, requests, earnings, available: Math.max(0, earnings - committed), bankVerified, minimumAmount: 50000, processingDays: { min: 3, max: 10 } });
 });
 app.post('/api/payouts/requests', async (req, res) => {
     const user = await getUserFromRequest(req);
@@ -567,12 +629,21 @@ app.post('/api/payouts/requests', async (req, res) => {
     const parsed = PayoutRequestSchema.safeParse(req.body);
     if (!parsed.success)
         return res.status(400).json({ code: 'INVALID_PAYOUT_REQUEST' });
-    const agreement = await getPayoutAgreement(user.id);
+    const creator = dbReady() ? await prisma.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const bankVerified = await readJsonSetting(bankVerificationKey(user.id), false);
+    if (!bankVerified)
+        return res.status(409).json({ code: 'BANK_VERIFICATION_REQUIRED' });
+    if (parsed.data.amount < 50000)
+        return res.status(409).json({ code: 'MINIMUM_PAYOUT', minimumAmount: 50000 });
+    const paidOrders = await prisma.digitalOrder.findMany({ where: { creatorId: creator.id, status: 'PAID' } });
+    const earnings = paidOrders.reduce((sum, order) => sum + order.creatorPayout, 0);
     const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id && ['PENDING', 'APPROVED'].includes(item.status));
     const committed = requests.reduce((sum, item) => sum + item.amount, 0);
-    if (parsed.data.amount + committed > agreement.amount)
-        return res.status(409).json({ code: 'AGREEMENT_AMOUNT_EXCEEDED', available: Math.max(0, agreement.amount - committed) });
-    const record = { id: `payout-${nanoid(12)}`, creatorId: user.id, ...parsed.data, status: 'PENDING', createdAt: new Date().toISOString() };
+    if (parsed.data.amount + committed > earnings)
+        return res.status(409).json({ code: 'EARNINGS_EXCEEDED', available: Math.max(0, earnings - committed) });
+    const record = { id: `payout-${nanoid(12)}`, creatorId: user.id, ...parsed.data, status: 'PENDING', estimatedDays: '3-10', createdAt: new Date().toISOString() };
     if (dbReady())
         await prisma.adminSetting.create({ data: { key: payoutRequestKey(record.id), value: JSON.stringify(record) } });
     else
@@ -602,7 +673,17 @@ function creatorSummary(creator) {
     };
 }
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'creator-safe-support-api' }));
+app.get('/api/health', async (_req, res) => {
+    if (!prisma)
+        return res.status(requireDatabase ? 503 : 200).json({ ok: !requireDatabase, service: 'creator-safe-support-api', database: 'not_configured' });
+    try {
+        await prisma.$queryRaw `SELECT 1`;
+        res.json({ ok: true, service: 'creator-safe-support-api', database: 'connected' });
+    }
+    catch {
+        res.status(503).json({ ok: false, service: 'creator-safe-support-api', database: 'unavailable' });
+    }
+});
 app.get('/api/categories', (_req, res) => {
     res.json(categories.map(category => ({
         ...category,
@@ -695,6 +776,80 @@ app.get('/api/creators/me/application', async (req, res) => {
     }
     res.json({ status: application.reviewStatus || (creator?.isActive ? 'APPROVED' : 'PENDING'), reviewNote: application.reviewNote || '' });
 });
+const CreatorProfileUpdateSchema = z.object({
+    bio: z.string().trim().min(1).max(500),
+    instagramId: z.string().trim().max(80).optional().default(''),
+    instagramVideoUrl: z.string().trim().url().or(z.literal('')).optional().default(''),
+    dmAlertThreshold: z.number().int().min(0).max(100000000),
+    dmNotice: z.string().trim().max(500).optional().default(''),
+    bankName: z.string().trim().min(1).max(60),
+    accountHolder: z.string().trim().min(1).max(60),
+    accountNumber: z.string().trim().min(1).max(80)
+});
+app.get('/api/creators/me/profile', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user)
+        return res.status(401).json({ code: 'UNAUTHORIZED' });
+    if (user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const row = dbReady() ? await prisma.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }) : null;
+    let application = {};
+    try {
+        application = row ? JSON.parse(row.value) : JSON.parse(creatorApplicationFallback.get(user.id) || '{}');
+    }
+    catch {
+        application = {};
+    }
+    return res.json({
+        name: user.name,
+        email: user.email,
+        bio: application.bio || '',
+        instagramId: application.instagramId || '',
+        instagramVideoUrl: application.instagramVideoUrl || '',
+        dmAlertThreshold: Number(application.dmAlertThreshold ?? 10000),
+        dmNotice: application.dmNotice || '',
+        bankName: application.bankName || '',
+        accountHolder: application.accountHolder || '',
+        accountNumber: application.accountNumber || '',
+        reviewStatus: application.reviewStatus || 'PENDING',
+        reviewNote: application.reviewNote || ''
+    });
+});
+app.put('/api/creators/me/profile', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user)
+        return res.status(401).json({ code: 'UNAUTHORIZED' });
+    if (user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const parsed = CreatorProfileUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_CREATOR_PROFILE', issues: parsed.error.issues });
+    const creator = dbReady() ? await prisma.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+    if (dbReady() && !creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const key = `creatorApplication:${user.id}`;
+    const row = dbReady() ? await prisma.adminSetting.findUnique({ where: { key } }) : null;
+    let application = {};
+    try {
+        application = row ? JSON.parse(row.value) : {};
+    }
+    catch {
+        application = {};
+    }
+    const value = JSON.stringify({
+        ...application,
+        ...parsed.data,
+        payoutAccount: [parsed.data.bankName, parsed.data.accountHolder, parsed.data.accountNumber].join(' / ')
+    });
+    if (dbReady()) {
+        await prisma.adminSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+        await prisma.creatorProfile.update({ where: { id: creator.id }, data: { bio: parsed.data.bio, instagramId: parsed.data.instagramId || null } });
+    }
+    else {
+        creatorApplicationFallback.set(user.id, value);
+    }
+    return res.json({ saved: true });
+});
 app.post('/api/creators/me/photos', async (req, res) => {
     const user = await getUserFromRequest(req);
     if (!user)
@@ -782,7 +937,11 @@ app.get('/api/creators/:slug', async (req, res) => {
                 galleryImages = [];
             }
         }
-        return res.json(dbCreatorSummary(creator, galleryImages));
+        const extras = creator.userId ? await readJsonSetting(creatorExtrasKey(creator.userId), { socialLinks: {}, xAutoPost: false }) : { socialLinks: {}, xAutoPost: false };
+        const summary = dbCreatorSummary(creator, galleryImages);
+        const productMeta = await Promise.all((creator.digitalProducts ?? []).map((item) => readJsonSetting(productMetaKey(item.id), { type: 'GIFT', quantity: 1 })));
+        summary.wishlist = summary.wishlist.map((item, index) => ({ ...item, type: productMeta[index].type || 'GIFT', quantity: productMeta[index].quantity ?? 1, locked: productMeta[index].type === 'BLIND_DM' }));
+        return res.json({ ...summary, socialLinks: extras.socialLinks || {} });
     }
     const creator = creators.find(item => item.slug === req.params.slug || item.id === req.params.slug);
     if (!creator)
@@ -796,58 +955,74 @@ app.post('/api/auth/signup', async (req, res) => {
     const input = parsed.data;
     const email = input.email.toLowerCase();
     if (dbReady()) {
-        await seedDatabase();
-        const exists = await prisma.user.findUnique({ where: { email } });
-        if (exists)
-            return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
-        const userId = `usr_${nanoid(12)}`;
-        const photoUrls = input.role === 'CREATOR'
-            ? (input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? creatorPhotoUrl(userId, index) : photo)
-            : [];
-        const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        const user = await prisma.user.create({
-            data: {
-                id: userId,
-                email,
-                displayName: input.name,
-                passwordHash: await bcrypt.hash(input.password, 12),
-                role: input.role,
-                ...(input.role === 'CREATOR'
-                    ? {
-                        creatorProfile: {
-                            create: {
-                                slug: requestedSlug || `creator-${nanoid(5)}`,
-                                displayName: input.name,
-                                handle: `@${requestedSlug || input.name}`,
-                                bio: input.bio || 'EON Korea 크리에이터입니다.',
-                                category: 'creator',
-                                platform: 'Instagram',
-                                avatarUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
-                                coverUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
-                                instagramId: input.instagramId || null,
-                                isActive: false
+        try {
+            await seedDatabase();
+            const exists = await prisma.user.findUnique({ where: { email } });
+            if (exists)
+                return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
+            const userId = `usr_${nanoid(12)}`;
+            const photoUrls = input.role === 'CREATOR'
+                ? (input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? creatorPhotoUrl(userId, index) : photo)
+                : [];
+            const requestedSlug = input.creatorSlug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const passwordHash = await bcrypt.hash(input.password, 12);
+            const session = await prisma.$transaction(async (tx) => {
+                const user = await tx.user.create({
+                    data: {
+                        id: userId,
+                        email,
+                        displayName: input.name,
+                        passwordHash,
+                        role: input.role,
+                        ...(input.role === 'CREATOR'
+                            ? {
+                                creatorProfile: {
+                                    create: {
+                                        slug: requestedSlug ? `${requestedSlug}-${nanoid(8)}` : `creator-${nanoid(12)}`,
+                                        displayName: input.name,
+                                        handle: `@${requestedSlug || input.name}`,
+                                        bio: input.bio || 'EON Korea 크리에이터입니다.',
+                                        category: 'creator',
+                                        platform: 'Instagram',
+                                        avatarUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
+                                        coverUrl: photoUrls[0] || '/influencers/trendy-influencers-wall.png',
+                                        instagramId: input.instagramId || null,
+                                        isActive: false
+                                    }
+                                }
                             }
-                        }
+                            : {})
                     }
-                    : {})
-            }
-        });
-        if (input.role === 'CREATOR') {
-            await Promise.all((input.photoUrls || []).map((photo, index) => isWebpDataUrl(photo) ? saveCreatorPhoto(user.id, index, photo) : Promise.resolve()));
-            const applicationValue = JSON.stringify({
-                bio: input.bio || '', photoUrls, instagramVideoUrl: input.instagramVideoUrl || '',
-                bankName: input.bankName || '', accountHolder: input.accountHolder || '', accountNumber: input.accountNumber || '',
-                payoutAccount: [input.bankName, input.accountHolder, input.accountNumber].join(' / '), instagramId: input.instagramId || '',
-                dmAlertThreshold: input.dmAlertThreshold ?? 10000, dmNotice: input.dmNotice || '',
-                reviewStatus: 'PENDING', reviewNote: '', registeredAt: new Date().toISOString()
-            });
-            await prisma.adminSetting.upsert({
-                where: { key: `creatorApplication:${user.id}` },
-                update: { value: applicationValue },
-                create: { key: `creatorApplication:${user.id}`, value: applicationValue }
-            });
+                });
+                if (input.role === 'CREATOR') {
+                    for (const [index, photo] of (input.photoUrls || []).entries()) {
+                        if (isWebpDataUrl(photo))
+                            await tx.adminSetting.create({ data: { key: creatorPhotoKey(user.id, index), value: photo } });
+                    }
+                    const applicationValue = JSON.stringify({
+                        bio: input.bio || '', photoUrls, instagramVideoUrl: input.instagramVideoUrl || '',
+                        bankName: input.bankName || '', accountHolder: input.accountHolder || '', accountNumber: input.accountNumber || '',
+                        payoutAccount: [input.bankName, input.accountHolder, input.accountNumber].join(' / '), instagramId: input.instagramId || '',
+                        dmAlertThreshold: input.dmAlertThreshold ?? 10000, dmNotice: input.dmNotice || '',
+                        reviewStatus: 'PENDING', reviewNote: '', registeredAt: new Date().toISOString()
+                    });
+                    await tx.adminSetting.upsert({
+                        where: { key: `creatorApplication:${user.id}` },
+                        update: { value: applicationValue },
+                        create: { key: `creatorApplication:${user.id}`, value: applicationValue }
+                    });
+                }
+                await tx.pointWallet.create({ data: { userId: user.id, balance: 0 } });
+                return issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role, createdAt: user.createdAt.toISOString() }, tx);
+            }, { timeout: 15000 });
+            return res.status(201).json(session);
         }
-        return res.status(201).json(await issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role, createdAt: user.createdAt.toISOString() }));
+        catch (error) {
+            if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+                return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
+            }
+            return res.status(503).json({ code: 'SIGNUP_SERVICE_UNAVAILABLE', message: '가입 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.' });
+        }
     }
     if (users.some(user => user.email === email))
         return res.status(409).json({ code: 'EMAIL_ALREADY_EXISTS' });
@@ -894,7 +1069,6 @@ app.post('/api/auth/login', async (req, res) => {
                 creatorSlug: undefined,
                 createdAt: dbUser.createdAt.toISOString()
             };
-            users.push(user);
             return res.json(await issueSession(user));
         }).catch(() => res.status(503).json({ code: 'AUTH_SERVICE_UNAVAILABLE' }));
     }
@@ -1109,6 +1283,118 @@ app.get('/api/supports', async (_req, res) => {
     }
     res.json(supports);
 });
+const CreatorExtrasSchema = z.object({
+    socialLinks: z.record(z.string(), z.string().max(300)).default({}),
+    xAutoPost: z.boolean().default(false),
+    xPostTemplate: z.string().max(300).default('{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}')
+});
+const ProductSchema = z.object({
+    title: z.string().trim().min(1).max(80), description: z.string().max(600).default(''),
+    pointPrice: z.number().int().min(100).max(100000000), imageUrl: CreatorPhotoSchema.optional(),
+    type: z.enum(['GIFT', 'CALLING', 'BLIND_DM', 'PHOTOSET']).default('GIFT'), quantity: z.number().int().min(1).max(999).default(1),
+    collection: z.string().max(60).default(''), secretText: z.string().max(3000).default(''), secretMediaUrl: z.string().max(1000).default(''),
+    isActive: z.boolean().default(true)
+});
+app.get('/api/creators/me/extras', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    res.json(await readJsonSetting(creatorExtrasKey(user.id), { socialLinks: {}, xAutoPost: false, xPostTemplate: '{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}' }));
+});
+app.put('/api/creators/me/extras', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const parsed = CreatorExtrasSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_CREATOR_EXTRAS' });
+    await writeJsonSetting(creatorExtrasKey(user.id), parsed.data);
+    res.json(parsed.data);
+});
+app.get('/api/creators/me/products', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id }, include: { digitalProducts: { orderBy: { createdAt: 'desc' } } } });
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const products = await Promise.all(creator.digitalProducts.map(async (item) => ({ ...item, ...(await readJsonSetting(productMetaKey(item.id), { type: 'GIFT', quantity: 1, collection: '', secretText: '', secretMediaUrl: '' })) })));
+    res.json(products);
+});
+app.post('/api/creators/me/products', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const parsed = ProductSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_PRODUCT', issues: parsed.error.issues });
+    const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id } });
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const { type, quantity, collection, secretText, secretMediaUrl, ...data } = parsed.data;
+    const product = await prisma.digitalProduct.create({ data: { creatorId: creator.id, ...data } });
+    const meta = { type, quantity, collection, secretText, secretMediaUrl };
+    await writeJsonSetting(productMetaKey(product.id), meta);
+    res.status(201).json({ ...product, ...meta });
+});
+app.put('/api/creators/me/products/:id', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const parsed = ProductSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_PRODUCT' });
+    const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id } });
+    const existing = creator ? await prisma.digitalProduct.findFirst({ where: { id: req.params.id, creatorId: creator.id } }) : null;
+    if (!existing)
+        return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+    const { type, quantity, collection, secretText, secretMediaUrl, ...data } = parsed.data;
+    const product = await prisma.digitalProduct.update({ where: { id: existing.id }, data });
+    const meta = { type, quantity, collection, secretText, secretMediaUrl };
+    await writeJsonSetting(productMetaKey(product.id), meta);
+    res.json({ ...product, ...meta });
+});
+app.get('/api/wallet/me', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user)
+        return res.status(401).json({ code: 'UNAUTHORIZED' });
+    const wallet = await prisma.pointWallet.upsert({ where: { userId: user.id }, update: {}, create: { userId: user.id, balance: 0 } });
+    res.json({ balance: wallet.balance, currency: 'CASH' });
+});
+app.post('/api/wallet/support', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'FAN')
+        return res.status(403).json({ code: 'FAN_ONLY' });
+    const parsed = z.object({ productId: z.string().min(1), message: z.string().max(500).default('') }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_SUPPORT' });
+    const product = await prisma.digitalProduct.findFirst({ where: { id: parsed.data.productId, isActive: true }, include: { creator: true } });
+    if (!product)
+        return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+    const rate = await getCommissionRate();
+    const adminFee = Math.round(product.pointPrice * rate / 100);
+    const order = await prisma.$transaction(async (tx) => {
+        const wallet = await tx.pointWallet.findUnique({ where: { userId: user.id } });
+        if (!wallet || wallet.balance < product.pointPrice)
+            throw new Error('INSUFFICIENT_BALANCE');
+        await tx.pointWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: product.pointPrice } } });
+        return tx.digitalOrder.create({ data: { orderNo: `cash_${nanoid(12)}`, creatorId: product.creatorId, productId: product.id, fanId: user.id, purchaserName: user.name, purchaserEmail: user.email, message: parsed.data.message, pointAmount: product.pointPrice, paymentProvider: 'EON_CASH', paymentKey: `wallet_${nanoid(12)}`, status: 'PAID', commissionRate: rate, adminFee, creatorPayout: product.pointPrice - adminFee, paidAt: new Date() } });
+    }).catch(error => error instanceof Error && error.message === 'INSUFFICIENT_BALANCE' ? null : Promise.reject(error));
+    if (!order)
+        return res.status(409).json({ code: 'INSUFFICIENT_BALANCE' });
+    const meta = await readJsonSetting(productMetaKey(product.id), { type: 'GIFT' });
+    const preference = await readJsonSetting(fanPreferenceKey(product.creatorId, user.id), { blocked: false, muted: false });
+    const extras = product.creator.userId ? await readJsonSetting(creatorExtrasKey(product.creator.userId), { xAutoPost: false, xPostTemplate: '' }) : { xAutoPost: false, xPostTemplate: '' };
+    const alertBody = `${preference.blocked ? '차단된 사용자 ' : ''}${user.name}님이 ${product.title} ${product.pointPrice.toLocaleString()}캐시를 후원했습니다.`;
+    if (meta.type === 'CALLING')
+        await queueIntegration('KAKAO', alertBody, product.creatorId, { orderId: order.orderNo, blocked: preference.blocked });
+    if (extras.xAutoPost) {
+        const template = extras.xPostTemplate || '{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}';
+        const body = template.replace('{fan}', user.name).replace('{creator}', product.creator.displayName).replace('{item}', product.title).replace('{url}', `${process.env.PUBLIC_WEB_URL || 'https://eon8.co.kr'}/#creator/${product.creator.slug}`);
+        await queueIntegration('X', body, product.creatorId, { orderId: order.orderNo });
+    }
+    res.status(201).json({ orderId: order.orderNo, balanceUsed: product.pointPrice, status: 'PAID' });
+});
 app.get('/api/payments/orders', async (req, res) => {
     const viewer = await getUserFromRequest(req);
     if (viewer?.role !== 'ADMIN')
@@ -1157,11 +1443,66 @@ app.get('/api/fan/orders', async (req, res) => {
     const rows = await prisma.digitalOrder.findMany({
         where: { fanId: user.id }, include: { creator: true, product: true }, orderBy: { createdAt: 'desc' }, take: 100
     });
-    res.json(rows.map((order) => ({
-        id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
-        message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
-        status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null
+    const result = await Promise.all(rows.map(async (order) => {
+        const meta = order.productId ? await readJsonSetting(productMetaKey(order.productId), { type: 'GIFT', secretText: '', secretMediaUrl: '' }) : { type: 'GIFT', secretText: '', secretMediaUrl: '' };
+        const unlocked = order.status === 'PAID' && meta.type === 'BLIND_DM';
+        return {
+            id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
+            message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
+            status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null,
+            contentType: meta.type, unlocked, secretText: unlocked ? meta.secretText : undefined,
+            secretMediaUrl: unlocked ? meta.secretMediaUrl : undefined
+        };
+    }));
+    res.json(result);
+});
+app.get('/api/creators/me/orders', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user)
+        return res.status(401).json({ code: 'UNAUTHORIZED' });
+    if (user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    if (!dbReady())
+        return res.json([]);
+    const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id } });
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    const rows = await prisma.digitalOrder.findMany({
+        where: { creatorId: creator.id },
+        include: { fan: true, product: true },
+        orderBy: { createdAt: 'desc' },
+        take: 200
+    });
+    const mapped = await Promise.all(rows.map(async (order) => ({
+        id: order.orderNo,
+        fanId: order.fanId || '',
+        fanName: order.fan?.displayName || order.purchaserName,
+        fanEmail: order.fan?.email || order.purchaserEmail || '',
+        product: order.product?.title || '후원',
+        message: order.message || '',
+        amount: order.pointAmount,
+        adminFee: order.adminFee,
+        creatorPayout: order.creatorPayout,
+        status: order.status,
+        payoutStatus: order.payoutStatus,
+        createdAt: order.createdAt.toISOString(),
+        paidAt: order.paidAt?.toISOString() || null,
+        ...(order.fanId ? await readJsonSetting(fanPreferenceKey(creator.id, order.fanId), { blocked: false, muted: false }) : { blocked: false, muted: false })
     })));
+    res.json(mapped);
+});
+app.post('/api/creators/me/fans/:fanId/preferences', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'CREATOR')
+        return res.status(403).json({ code: 'CREATOR_ONLY' });
+    const parsed = z.object({ blocked: z.boolean(), muted: z.boolean() }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_PREFERENCES' });
+    const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id } });
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+    await writeJsonSetting(fanPreferenceKey(creator.id, req.params.fanId), parsed.data);
+    res.json(parsed.data);
 });
 app.get('/api/admin/users', async (_req, res) => {
     if (!dbReady())
@@ -1181,9 +1522,53 @@ app.get('/api/admin/users', async (_req, res) => {
         }
         if (applicationData)
             applicationData.reviewStatus ||= user.creatorProfile?.isActive ? 'APPROVED' : 'PENDING';
-        return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, application: applicationData, createdAt: user.createdAt };
+        const wallet = await prisma.pointWallet.findUnique({ where: { userId: user.id } });
+        const bankVerified = user.role === 'CREATOR' ? await readJsonSetting(bankVerificationKey(user.id), false) : undefined;
+        return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, walletBalance: wallet?.balance || 0, bankVerified, application: applicationData, createdAt: user.createdAt };
     }));
     res.json(usersWithApplications);
+});
+app.post('/api/admin/wallets/:userId/adjust', async (req, res) => {
+    const parsed = z.object({ delta: z.number().int().min(-100000000).max(100000000).refine(value => value !== 0), reason: z.string().min(2).max(200) }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_WALLET_ADJUSTMENT' });
+    const user = await prisma.user.findUnique({ where: { id: req.params.userId } });
+    if (!user)
+        return res.status(404).json({ code: 'USER_NOT_FOUND' });
+    const wallet = await prisma.pointWallet.upsert({ where: { userId: user.id }, update: {}, create: { userId: user.id, balance: 0 } });
+    if (wallet.balance + parsed.data.delta < 0)
+        return res.status(409).json({ code: 'NEGATIVE_BALANCE', balance: wallet.balance });
+    const updated = await prisma.$transaction(async (tx) => {
+        const next = await tx.pointWallet.update({ where: { id: wallet.id }, data: { balance: { increment: parsed.data.delta } } });
+        await tx.pointCharge.create({ data: { walletId: wallet.id, points: parsed.data.delta, amount: 0, paymentProvider: `ADMIN:${parsed.data.reason}`, paymentKey: `adjust_${nanoid(10)}`, status: 'PAID' } });
+        return next;
+    });
+    res.json({ userId: user.id, balance: updated.balance, delta: parsed.data.delta, reason: parsed.data.reason });
+});
+app.post('/api/admin/creators/:userId/bank-verification', async (req, res) => {
+    const parsed = z.object({ verified: z.boolean() }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_BANK_VERIFICATION' });
+    const user = await prisma.user.findUnique({ where: { id: req.params.userId } });
+    if (!user || user.role !== 'CREATOR')
+        return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+    await writeJsonSetting(bankVerificationKey(user.id), parsed.data.verified);
+    res.json({ userId: user.id, verified: parsed.data.verified });
+});
+app.post('/api/admin/notifications/test', async (req, res) => {
+    const parsed = z.object({ creatorId: z.string().min(1), channel: z.enum(['KAKAO', 'X']), body: z.string().min(1).max(500) }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_NOTIFICATION' });
+    res.status(201).json(await queueIntegration(parsed.data.channel, parsed.data.body, parsed.data.creatorId, { test: true }));
+});
+app.get('/api/admin/notifications', async (_req, res) => {
+    const rows = await prisma.adminSetting.findMany({ where: { key: { startsWith: 'notificationOutbox:' } }, orderBy: { updatedAt: 'desc' }, take: 200 });
+    res.json(rows.map(row => { try {
+        return JSON.parse(row.value);
+    }
+    catch {
+        return { id: row.key, status: 'INVALID' };
+    } }));
 });
 app.post('/api/admin/creator-applications/:userId/review', async (req, res) => {
     const parsed = z.object({ status: z.enum(['PENDING', 'APPROVED', 'ON_HOLD']), reviewNote: z.string().max(500).optional().default('') }).safeParse(req.body);

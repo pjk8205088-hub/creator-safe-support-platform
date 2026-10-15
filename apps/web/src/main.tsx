@@ -14,6 +14,8 @@ import {
   HeartHandshake,
   Images,
   LayoutDashboard,
+  Link2,
+  PackagePlus,
   PanelLeft,
   LockKeyhole,
   LogIn,
@@ -26,6 +28,7 @@ import {
   UserRoundPlus,
   UserPlus,
   WalletCards,
+  VolumeX,
   X
 } from 'lucide-react';
 
@@ -46,6 +49,9 @@ type WishlistItem = {
   categoryId: string;
   imageUrl: string;
   note: string;
+  type?: 'GIFT' | 'CALLING' | 'BLIND_DM' | 'PHOTOSET';
+  quantity?: number;
+  locked?: boolean;
 };
 
 type Creator = {
@@ -63,6 +69,7 @@ type Creator = {
   gallerySheetUrl?: string;
   category?: Category;
   wishlist: WishlistItem[];
+  socialLinks?: Record<string, string>;
 };
 
 type Support = {
@@ -999,7 +1006,7 @@ function FanPage({
   const [productId, setProductId] = useState('');
   const [message, setMessage] = useState('');
   const [pg, setPg] = useState<{ provider: string; ready: boolean; mode: string; message: string } | null>(null);
-  const [orders, setOrders] = useState<Array<{ id: string; creator: string; product: string; message: string; amount: number; paymentProvider: string; status: string; createdAt: string; paidAt: string | null }>>([]);
+  const [orders, setOrders] = useState<Array<{ id: string; creator: string; product: string; message: string; amount: number; paymentProvider: string; status: string; createdAt: string; paidAt: string | null; contentType?: string; unlocked?: boolean; secretText?: string; secretMediaUrl?: string }>>([]);
   const [loadError, setLoadError] = useState('');
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'REFUNDED'>('ALL');
   const creator = creators.find(item => item.id === creatorId) || creators[0];
@@ -1048,7 +1055,7 @@ function FanPage({
     </div>
     <section className="fan-orders"><div className="fan-order-heading"><div><span className="kicker">My messages & payments</span><h2>보낸 메시지 · 결제 내역</h2></div><span className="account-chip">전체 {orders.length}건</span></div>
       <div className="fan-order-filters" role="group" aria-label="결제 내역 필터">{([{ key: 'ALL', label: '전체' }, { key: 'PAID', label: '결제 완료' }, { key: 'PENDING', label: '확인 중' }, { key: 'REFUNDED', label: '환불' }] as const).map(item => <button key={item.key} type="button" className={orderFilter === item.key ? 'active' : ''} aria-pressed={orderFilter === item.key} onClick={() => setOrderFilter(item.key)}>{item.label}<span>{item.key === 'ALL' ? orders.length : item.key === 'PAID' ? paidOrders.length : item.key === 'PENDING' ? pendingOrders.length : refundedOrders.length}</span></button>)}</div>
-      {loadError ? <p className="form-error" role="alert">{loadError}</p> : filteredOrders.length ? <div className="fan-order-list">{filteredOrders.map(order => <article className="fan-order" key={order.id}><header><div><b>{order.creator}</b><small>{order.product} · {new Date(order.createdAt).toLocaleString('ko-KR')}</small></div><span className={`application-status ${order.status === 'PAID' ? 'approved' : order.status === 'REFUNDED' ? 'on-hold' : ''}`}>{order.status === 'PAID' ? '결제 완료' : order.status === 'REFUNDED' ? '환불' : '결제 확인 중'}</span></header><p>{order.message || '응원 메시지 없음'}</p><footer><span>{order.paymentProvider}{order.paidAt ? ` · 승인 ${new Date(order.paidAt).toLocaleString('ko-KR')}` : ''}</span><b>{order.amount.toLocaleString()}원</b></footer></article>)}</div> : <div className="empty-state">{orders.length ? '선택한 상태의 내역이 없습니다.' : '아직 메시지나 결제 내역이 없습니다. 셀럽을 둘러보고 첫 응원을 보내보세요.'}</div>}
+      {loadError ? <p className="form-error" role="alert">{loadError}</p> : filteredOrders.length ? <div className="fan-order-list">{filteredOrders.map(order => <article className="fan-order" key={order.id}><header><div><b>{order.creator}</b><small>{order.product} · {new Date(order.createdAt).toLocaleString('ko-KR')}</small></div><span className={`application-status ${order.status === 'PAID' ? 'approved' : order.status === 'REFUNDED' ? 'on-hold' : ''}`}>{order.status === 'PAID' ? '결제 완료' : order.status === 'REFUNDED' ? '환불' : '결제 확인 중'}</span></header><p>{order.message || '응원 메시지 없음'}</p>{order.unlocked && <div className="unlocked-dm"><span className="kicker">Unlocked DM</span><p>{order.secretText}</p>{order.secretMediaUrl && <a href={order.secretMediaUrl} target="_blank" rel="noreferrer">사진·영상 열기 <ArrowRight size={14} /></a>}</div>}<footer><span>{order.paymentProvider}{order.paidAt ? ` · 승인 ${new Date(order.paidAt).toLocaleString('ko-KR')}` : ''}</span><b>{order.amount.toLocaleString()}원</b></footer></article>)}</div> : <div className="empty-state">{orders.length ? '선택한 상태의 내역이 없습니다.' : '아직 메시지나 결제 내역이 없습니다. 셀럽을 둘러보고 첫 응원을 보내보세요.'}</div>}
     </section>
   </section>;
 }
@@ -1066,6 +1073,21 @@ function CreatorPage({
   beginCheckout: (item: WishlistItem) => void;
   walletPoints: number;
 }) {
+  const [cashBalance, setCashBalance] = useState(walletPoints);
+  const [supportStatus, setSupportStatus] = useState('');
+  const storedSession = (() => { try { return JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null; } catch { return null; } })();
+  useEffect(() => {
+    if (!storedSession?.token) return;
+    fetch(`${API}/api/wallet/me`, { headers: { Authorization: `Bearer ${storedSession.token}` } }).then(response => response.ok ? response.json() : null).then(data => { if (data) setCashBalance(data.balance); }).catch(() => undefined);
+  }, [storedSession?.token]);
+  async function supportWithCash(item: WishlistItem) {
+    if (!storedSession?.token || storedSession.user.role !== 'FAN') { location.hash = 'fan-login'; return; }
+    setSupportStatus('후원을 처리하고 있습니다.');
+    const response = await fetch(`${API}/api/wallet/support`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${storedSession.token}` }, body: JSON.stringify({ productId: item.id, message: form.message }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { setSupportStatus(result.code === 'INSUFFICIENT_BALANCE' ? '보유 캐시가 부족합니다. 먼저 캐시를 충전해 주세요.' : '후원을 완료하지 못했습니다.'); return; }
+    setCashBalance(current => current - item.price); setSupportStatus(`${item.title} 후원이 완료되었습니다.`);
+  }
   return (
     <section className="page-shell">
       <div
@@ -1094,6 +1116,7 @@ function CreatorPage({
         </div>
       </section>
       <CreatorGallery creator={creator} />
+      {creator.socialLinks && Object.values(creator.socialLinks).some(Boolean) && <nav className="creator-social-links" aria-label="활동 사이트">{Object.entries(creator.socialLinks).filter(([, value]) => value).map(([key, value]) => <a key={key} href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noreferrer"><Link2 size={15} />{socialPlatforms.find(item => item[0] === key)?.[1] || key}</a>)}</nav>}
       <div className="creator-layout">
         <div>
           <div className="section-head compact-head">
@@ -1102,16 +1125,17 @@ function CreatorPage({
           </div>
           <div className="wish-grid">
             {creator.wishlist.map(item => (
-              <article className="wish-card" key={item.id}>
-              <CreatorSheetImage creator={creator} className="wish-image" tile={3 + creator.wishlist.indexOf(item)} cropY="23%" />
+              <article className={`wish-card ${item.locked ? 'is-locked' : ''}`} key={item.id}>
+              <div className="wish-media"><img className="wish-image" src={item.imageUrl} alt={item.title} loading="lazy" />{item.locked && <span><LockKeyhole size={18} />결제 후 공개</span>}</div>
                 <div>
+                  <span className="product-type-label">{item.type === 'CALLING' ? '콜링 알림' : item.type === 'BLIND_DM' ? '블라인드 DM' : item.type === 'PHOTOSET' ? '화보' : '선물'}</span>
                   <h3>{item.title}</h3>
                   <p>{item.note}</p>
                 </div>
                 <div className="wish-footer">
                   <b>{item.price.toLocaleString()}P</b>
-                  <button className="ghost-button" type="button" onClick={() => beginCheckout(item)}>
-                    결제하기
+                  <button className="ghost-button" type="button" onClick={() => supportWithCash(item)}>
+                    캐시로 후원
                   </button>
                 </div>
               </article>
@@ -1126,7 +1150,7 @@ function CreatorPage({
         </div>
         <aside className="support-panel">
           <h2>내 포인트 지갑</h2>
-          <p>보유 포인트 <b>{walletPoints.toLocaleString()}P</b></p>
+          <p>보유 캐시 <b>{cashBalance.toLocaleString()}캐시</b></p>
           <label>
             이름
             <input value={form.supporterName} onChange={event => setForm({ ...form, supporterName: event.target.value })} />
@@ -1136,6 +1160,7 @@ function CreatorPage({
             <textarea value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} />
           </label>
           <p>상품별 포인트가 차감됩니다. 포인트가 부족한 경우 충전 페이지에서 패키지를 선택해 주세요.</p>
+          {supportStatus && <p className="form-hint" role="status">{supportStatus}</p>}
           <a className="solid-button large" href="#wallet">
             <WalletCards size={18} />
             포인트 충전하기
@@ -1683,7 +1708,7 @@ function CreatorDashboard({ session }: { session: Session }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [orders, setOrders] = useState<Array<{ id: string; fanName: string; fanEmail: string; product: string; message: string; amount: number; adminFee: number; creatorPayout: number; status: string; payoutStatus: string; createdAt: string; paidAt: string | null }>>([]);
+  const [orders, setOrders] = useState<CreatorOrderHistoryItem[]>([]);
   const [ordersError, setOrdersError] = useState('');
   const loadProfile = () => fetch(`${API}/api/creators/me/profile`, { headers: { Authorization: `Bearer ${session.token}` } })
     .then(async response => {
@@ -1749,8 +1774,10 @@ function CreatorDashboard({ session }: { session: Session }) {
           {message && <p className="creator-save-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
           <button className="solid-button" type="submit" disabled={busy}>{busy ? '저장 중' : '프로필 저장'}</button>
         </form>
+        <CreatorLinkSettings session={session} />
+        <CreatorProductManager session={session} />
         <CreatorPhotoManager session={session} />
-        <CreatorOrderHistory orders={orders} error={ordersError} />
+        <CreatorOrderHistory session={session} orders={orders} setOrders={setOrders} error={ordersError} />
       </div>
       <aside className="creator-dashboard-side"><CreatorPayoutPanel session={session} /><div className="creator-side-note"><span className="kicker">Visibility</span><h2>공개 범위</h2><p>자기소개와 프로필 사진은 승인 후 팬에게 공개됩니다. 계좌번호, 로그인 이메일, 관리자 검토 메모는 공개 프로필에 표시되지 않습니다.</p><a href="#home">홈페이지 보기 <ArrowRight size={15} /></a></div></aside>
     </div>
@@ -1758,19 +1785,86 @@ function CreatorDashboard({ session }: { session: Session }) {
 }
 
 type CreatorOrderHistoryItem = {
-  id: string; fanName: string; fanEmail: string; product: string; message: string;
+  id: string; fanId: string; fanName: string; fanEmail: string; product: string; message: string;
   amount: number; adminFee: number; creatorPayout: number; status: string;
-  payoutStatus: string; createdAt: string; paidAt: string | null;
+  payoutStatus: string; createdAt: string; paidAt: string | null; blocked: boolean; muted: boolean;
 };
 
-function CreatorOrderHistory({ orders, error }: { orders: CreatorOrderHistoryItem[]; error: string }) {
+const socialPlatforms = [
+  ['x', 'X (Twitter)'], ['instagram', 'Instagram'], ['youtube', 'YouTube'], ['tiktok', 'TikTok'],
+  ['twitch', 'Twitch'], ['threads', 'Threads'], ['discord', 'Discord'], ['bluesky', 'Bluesky'], ['website', '개인 사이트']
+] as const;
+
+function CreatorLinkSettings({ session }: { session: Session }) {
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const [xAutoPost, setXAutoPost] = useState(false);
+  const [template, setTemplate] = useState('{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}');
+  const [status, setStatus] = useState('');
+  useEffect(() => { fetch(`${API}/api/creators/me/extras`, { headers: { Authorization: `Bearer ${session.token}` } }).then(response => response.json()).then(data => { setLinks(data.socialLinks || {}); setXAutoPost(Boolean(data.xAutoPost)); if (data.xPostTemplate) setTemplate(data.xPostTemplate); }).catch(() => setStatus('링크 설정을 불러오지 못했습니다.')); }, [session.token]);
+  async function save() {
+    setStatus('저장 중...');
+    const response = await fetch(`${API}/api/creators/me/extras`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ socialLinks: links, xAutoPost, xPostTemplate: template }) });
+    setStatus(response.ok ? '활동 링크와 자동 게시 설정을 저장했습니다.' : '설정을 저장하지 못했습니다.');
+  }
+  return <section className="admin-panel creator-link-settings">
+    <div className="admin-panel-head"><div><span className="kicker"><Link2 size={14} /> Profile links</span><h2>활동 사이트 연결</h2></div><span className="admin-badge light">팬에게 공개</span></div>
+    <p>사용하는 채널만 입력하세요. 프로필에서 팬이 바로 방문할 수 있습니다.</p>
+    <div className="social-link-grid">{socialPlatforms.map(([key, label]) => <label key={key}><span>{label}</span><input value={links[key] || ''} onChange={event => setLinks(current => ({ ...current, [key]: event.target.value }))} placeholder={key === 'website' ? 'https://...' : '@username 또는 채널 URL'} /></label>)}</div>
+    <div className="integration-setting"><label className="toggle-line"><input type="checkbox" checked={xAutoPost} onChange={event => setXAutoPost(event.target.checked)} /><span><b>X 자동 후원 게시</b><small>후원 완료 시 연동된 X 계정으로 게시 대기열을 만듭니다.</small></span></label><label>게시 문구<input value={template} onChange={event => setTemplate(event.target.value)} /><small>{'{fan}, {creator}, {item}, {url}'} 변수를 사용할 수 있습니다.</small></label></div>
+    {status && <p className="form-hint" role="status">{status}</p>}<button className="solid-button" type="button" onClick={save}>링크 설정 저장</button>
+  </section>;
+}
+
+type CreatorProduct = { id: string; title: string; description: string; pointPrice: number; imageUrl?: string; type: 'GIFT' | 'CALLING' | 'BLIND_DM' | 'PHOTOSET'; quantity: number; collection: string; secretText: string; secretMediaUrl: string; isActive: boolean };
+const emptyProduct: Omit<CreatorProduct, 'id'> = { title: '', description: '', pointPrice: 5000, imageUrl: '', type: 'GIFT', quantity: 1, collection: '', secretText: '', secretMediaUrl: '', isActive: true };
+
+function CreatorProductManager({ session }: { session: Session }) {
+  const [products, setProducts] = useState<CreatorProduct[]>([]);
+  const [draft, setDraft] = useState(emptyProduct);
+  const [editingId, setEditingId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const load = () => fetch(`${API}/api/creators/me/products`, { headers: { Authorization: `Bearer ${session.token}` } }).then(response => response.json()).then(setProducts);
+  useEffect(() => { load().catch(() => setStatus('후원 아이템을 불러오지 못했습니다.')); }, [session.token]);
+  async function selectImage(file?: File) { if (!file) return; try { const imageUrl = await optimizeCreatorPhoto(file); setDraft(current => ({ ...current, imageUrl })); } catch { setStatus('사진을 처리하지 못했습니다. 다른 사진을 선택해 주세요.'); } }
+  async function save(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setStatus('');
+    const response = await fetch(`${API}/api/creators/me/products${editingId ? `/${editingId}` : ''}`, { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` }, body: JSON.stringify(draft) });
+    setBusy(false);
+    if (!response.ok) return setStatus('이름, 사진, 가격을 확인해 주세요.');
+    setDraft(emptyProduct); setEditingId(''); setStatus(editingId ? '아이템을 수정했습니다.' : '새 후원 아이템을 공개했습니다.'); load();
+  }
+  function edit(item: CreatorProduct) { setEditingId(item.id); setDraft({ ...item }); document.querySelector('.creator-product-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  return <section className="admin-panel creator-product-manager">
+    <div className="admin-panel-head"><div><span className="kicker"><PackagePlus size={14} /> Support shop</span><h2>후원 아이템 만들기</h2></div><span className="admin-badge light">{products.length}개 운영 중</span></div>
+    <p>팬이 사진을 누르면 보유 캐시로 바로 후원합니다. 종 알림, 블라인드 DM, 화보도 같은 방식으로 만들 수 있습니다.</p>
+    <form className="creator-product-form" onSubmit={save}>
+      <label className="product-image-upload">대표 사진<input type="file" accept="image/*" onChange={event => selectImage(event.target.files?.[0])} />{draft.imageUrl ? <img src={draft.imageUrl} alt="아이템 미리보기" /> : <span><Images size={28} />사진 선택</span>}</label>
+      <div className="product-form-fields"><label>아이템 이름<input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="예: 커피 한 잔, 종 알림, 여름 화보" required /></label><div className="creator-profile-fields"><label>종류<select value={draft.type} onChange={event => setDraft({ ...draft, type: event.target.value as CreatorProduct['type'] })}><option value="GIFT">선물</option><option value="CALLING">콜링 알림</option><option value="BLIND_DM">블라인드 DM</option><option value="PHOTOSET">화보 판매</option></select></label><label>가격 (캐시)<input type="number" min="100" step="100" value={draft.pointPrice} onChange={event => setDraft({ ...draft, pointPrice: Number(event.target.value) })} required /></label><label>수량<input type="number" min="1" value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></label></div><label>팬에게 보여줄 설명<textarea value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} placeholder="이 후원이 무엇인지 짧고 분명하게 적어 주세요." /></label><label>컬렉션<input value={draft.collection} onChange={event => setDraft({ ...draft, collection: event.target.value })} placeholder="예: 데일리 선물, 2026 여름 화보" /></label>{draft.type === 'BLIND_DM' && <div className="blind-content-fields"><label>결제 후 공개할 메시지<textarea value={draft.secretText} onChange={event => setDraft({ ...draft, secretText: event.target.value })} /></label><label>결제 후 공개할 사진/영상 URL<input value={draft.secretMediaUrl} onChange={event => setDraft({ ...draft, secretMediaUrl: event.target.value })} placeholder="https://..." /></label><p><LockKeyhole size={15} /> 이 내용은 결제 전 API와 화면에 노출되지 않습니다.</p></div>}</div>
+      <div className="product-form-actions"><button className="solid-button" disabled={busy || !draft.imageUrl}>{busy ? '저장 중' : editingId ? '수정 저장' : '아이템 공개'}</button>{editingId && <button className="ghost-button" type="button" onClick={() => { setEditingId(''); setDraft(emptyProduct); }}>취소</button>}</div>
+    </form>
+    {status && <p className="form-hint" role="status">{status}</p>}
+    {products.length > 0 && <div className="creator-product-list">{products.map(item => <article key={item.id}><img src={item.imageUrl} alt="" /><div><span>{item.type === 'CALLING' ? '콜링 알림' : item.type === 'BLIND_DM' ? '블라인드 DM' : item.type === 'PHOTOSET' ? '화보' : '선물'}</span><b>{item.title}</b><small>{item.pointPrice.toLocaleString()}캐시 · 수량 {item.quantity}</small></div><button className="ghost-button" type="button" onClick={() => edit(item)}>수정</button></article>)}</div>}
+  </section>;
+}
+
+function CreatorOrderHistory({ session, orders, setOrders, error }: { session: Session; orders: CreatorOrderHistoryItem[]; setOrders: React.Dispatch<React.SetStateAction<CreatorOrderHistoryItem[]>>; error: string }) {
+  const [sort, setSort] = useState<'NEWEST' | 'AMOUNT'>('NEWEST');
+  const [supportOnly, setSupportOnly] = useState(false);
+  const visible = [...orders].filter(order => !supportOnly || order.status === 'PAID').sort((a, b) => sort === 'AMOUNT' ? b.amount - a.amount : Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  async function updatePreference(order: CreatorOrderHistoryItem, next: { blocked: boolean; muted: boolean }) {
+    if (!order.fanId) return;
+    const response = await fetch(`${API}/api/creators/me/fans/${order.fanId}/preferences`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` }, body: JSON.stringify(next) });
+    if (response.ok) setOrders(current => current.map(item => item.fanId === order.fanId ? { ...item, ...next } : item));
+  }
   const paid = orders.filter(order => order.status === 'PAID');
   const paidTotal = paid.reduce((sum, order) => sum + order.amount, 0);
   const payoutTotal = paid.reduce((sum, order) => sum + order.creatorPayout, 0);
   return <section className="admin-panel creator-order-history">
     <div className="admin-panel-head"><div><span className="kicker">Support history</span><h2>후원·정산 히스토리</h2></div><span className="admin-badge light">결제 완료 {paid.length}건</span></div>
     <div className="settings-metrics"><div><span>결제 완료 금액</span><b>{paidTotal.toLocaleString()}원</b></div><div><span>지급 예정액</span><b>{payoutTotal.toLocaleString()}원</b></div></div>
-    {error ? <p className="form-error">{error}</p> : orders.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>팬</th><th>상품·메시지</th><th>결제액</th><th>수수료</th><th>지급 예정액</th><th>상태</th><th>일시</th></tr></thead><tbody>{orders.map(order => <tr key={order.id}><td><b>{order.fanName}</b><small>{order.fanEmail}</small></td><td><b>{order.product}</b><small>{order.message || '메시지 없음'}</small></td><td>{order.amount.toLocaleString()}원</td><td>{order.adminFee.toLocaleString()}원</td><td>{order.creatorPayout.toLocaleString()}원</td><td>{order.status === 'PAID' ? `결제 완료 · ${order.payoutStatus}` : order.status}</td><td>{new Date(order.createdAt).toLocaleString('ko-KR')}</td></tr>)}</tbody></table></div> : <div className="empty-state">아직 후원 내역이 없습니다.</div>}
+    <div className="inbox-controls"><div className="segmented"><button className={sort === 'NEWEST' ? 'active' : ''} onClick={() => setSort('NEWEST')}>새 메시지순</button><button className={sort === 'AMOUNT' ? 'active' : ''} onClick={() => setSort('AMOUNT')}>후원금액순</button></div><label><input type="checkbox" checked={supportOnly} onChange={event => setSupportOnly(event.target.checked)} /> 후원 메시지만</label></div>
+    {error ? <p className="form-error">{error}</p> : visible.length ? <div className="creator-inbox-list">{visible.map(order => <article key={order.id} className={order.blocked ? 'is-blocked' : ''}><header><div><b>{order.fanName}</b><small>{order.fanEmail} · {new Date(order.createdAt).toLocaleString('ko-KR')}</small></div><strong>{order.amount.toLocaleString()}캐시</strong></header><p><b>{order.product}</b> · {order.message || '메시지 없음'}</p><footer><span>{order.blocked ? '차단된 사용자도 후원 가능 · 알림 기록됨' : order.status === 'PAID' ? '후원 완료' : order.status}</span><button type="button" className="ghost-button" onClick={() => updatePreference(order, { blocked: order.blocked, muted: !order.muted })}><VolumeX size={15} />{order.muted ? '알림 켜기' : '뮤트'}</button><button type="button" className="ghost-button" onClick={() => updatePreference(order, { blocked: !order.blocked, muted: order.muted })}>{order.blocked ? '차단 풀기' : '차단'}</button></footer></article>)}</div> : <div className="empty-state">아직 후원 내역이 없습니다.</div>}
   </section>;
 }
 
@@ -1850,7 +1944,7 @@ function CreatorPhotoManager({ session }: { session: Session }) {
 }
 
 function CreatorPayoutPanel({ session }: { session: Session }) {
-  const [data, setData] = useState<{ creator: { name: string; email: string; bankName: string; accountHolder: string; accountNumber: string; payoutAccount: string }; agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }> } | null>(null);
+  const [data, setData] = useState<{ creator: { name: string; email: string; bankName: string; accountHolder: string; accountNumber: string; payoutAccount: string }; agreement: { amount: number; note: string }; requests: Array<{ id: string; amount: number; status: string; note: string; createdAt: string }>; earnings: number; available: number; bankVerified: boolean; minimumAmount: number; processingDays: { min: number; max: number } } | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -1860,13 +1954,12 @@ function CreatorPayoutPanel({ session }: { session: Session }) {
     setError('');
     const response = await fetch(`${API}/api/payouts/requests`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ amount: Number(amount), note }) });
     const result = await response.json();
-    if (!response.ok) return setError(result.code === 'AGREEMENT_AMOUNT_EXCEEDED' ? `신청 가능 금액은 ${Number(result.available || 0).toLocaleString()}원입니다.` : '출금 신청에 실패했습니다.');
+    if (!response.ok) return setError(result.code === 'BANK_VERIFICATION_REQUIRED' ? '관리자에게 정산 계좌 인증을 먼저 받아 주세요.' : result.code === 'MINIMUM_PAYOUT' ? '출금은 50,000캐시 이상부터 신청할 수 있습니다.' : result.code === 'EARNINGS_EXCEEDED' ? `신청 가능 금액은 ${Number(result.available || 0).toLocaleString()}캐시입니다.` : '출금 신청에 실패했습니다.');
     setAmount(''); setNote(''); load();
   }
-  const requested = data?.requests.filter(item => ['PENDING', 'APPROVED'].includes(item.status)).reduce((sum, item) => sum + item.amount, 0) || 0;
-  const available = Math.max(0, (data?.agreement.amount || 0) - requested);
+  const available = data?.available || 0;
   const account = data?.creator.bankName ? `${data.creator.bankName} / ${data.creator.accountHolder} / ${data.creator.accountNumber}` : data?.creator.payoutAccount;
-  return <section className="admin-panel payout-panel"><div className="admin-panel-head"><div><span className="kicker">Creator Settlement</span><h2>약정 정산 및 출금 신청</h2></div><span className="admin-badge light">출금 가능 {available.toLocaleString()}원</span></div><p>등록 계좌: {account || '미등록'} · 관리자가 등록한 약정액 기준으로 출금 신청합니다. 실제 송금은 관리자 확인 후 진행됩니다.</p><div className="settings-metrics"><div><span>약정액</span><b>{(data?.agreement.amount || 0).toLocaleString()}원</b></div><div><span>신청 가능액</span><b>{available.toLocaleString()}원</b></div></div><div className="admin-form-grid"><label>출금 신청액<input type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} /></label><label>메모<input value={note} onChange={event => setNote(event.target.value)} placeholder="출금 메모" /></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-button" type="button" disabled={!amount || Number(amount) > available} onClick={requestPayout}>출금 신청</button>{data?.requests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>신청일</th><th>금액</th><th>상태</th></tr></thead><tbody>{data.requests.map(item => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.amount.toLocaleString()}원</td><td>{item.status}</td></tr>)}</tbody></table></div> : null}</section>;
+  return <section className="admin-panel payout-panel"><div className="admin-panel-head"><div><span className="kicker">Creator Settlement</span><h2>캐시 출금 신청</h2></div><span className={`admin-badge ${data?.bankVerified ? 'light' : ''}`}>{data?.bankVerified ? '계좌 인증 완료' : '계좌 인증 필요'}</span></div><p>등록 계좌: {account || '미등록'} · 받은 캐시가 50,000 이상일 때 인증된 계좌로 신청할 수 있으며 처리에는 3~10일이 걸릴 수 있습니다.</p><div className="settings-metrics"><div><span>누적 정산 수익</span><b>{(data?.earnings || 0).toLocaleString()}캐시</b></div><div><span>출금 가능</span><b>{available.toLocaleString()}캐시</b></div></div><div className="admin-form-grid"><label>출금 신청액<input type="number" min="50000" step="1000" value={amount} onChange={event => setAmount(event.target.value)} /></label><label>메모<input value={note} onChange={event => setNote(event.target.value)} placeholder="출금 메모" /></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-button" type="button" disabled={!amount || Number(amount) < 50000 || Number(amount) > available || !data?.bankVerified} onClick={requestPayout}>출금 신청</button>{data?.requests.length ? <div className="table-scroll"><table className="admin-table"><thead><tr><th>신청일</th><th>금액</th><th>상태</th></tr></thead><tbody>{data.requests.map(item => <tr key={item.id}><td>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</td><td>{item.amount.toLocaleString()}캐시</td><td>{item.status}</td></tr>)}</tbody></table></div> : null}</section>;
 }
 
 function Admin({
@@ -1893,7 +1986,9 @@ function Admin({
   const [payoutAgreements, setPayoutAgreements] = useState<Array<{ creatorId: string; amount: number; note: string; updatedAt: string }>>([]);
   const [agreementCreatorId, setAgreementCreatorId] = useState('');
   const [agreementAmount, setAgreementAmount] = useState('');
-  const [members, setMembers] = useState<Array<{ id: string; email: string; displayName: string; role: string; grade: string; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string; bankName?: string; accountHolder?: string; accountNumber?: string; instagramId?: string; dmAlertThreshold?: number; dmNotice?: string; reviewStatus?: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote?: string; reviewedAt?: string } }>>([]);
+  const [members, setMembers] = useState<Array<{ id: string; email: string; displayName: string; role: string; grade: string; walletBalance?: number; bankVerified?: boolean; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string; bankName?: string; accountHolder?: string; accountNumber?: string; instagramId?: string; dmAlertThreshold?: number; dmNotice?: string; reviewStatus?: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote?: string; reviewedAt?: string } }>>([]);
+  const [walletTool, setWalletTool] = useState({ userId: '', delta: '10000', reason: '운영 테스트 캐시' });
+  const [noticeTool, setNoticeTool] = useState({ creatorId: '', channel: 'KAKAO', body: '테스트 후원 알림입니다.' });
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
@@ -2207,6 +2302,15 @@ function Admin({
           </section>
           )}
 
+          {(showDashboard || section === 'settings') && (
+          <section className="admin-panel admin-panel-wide">
+            <div className="admin-panel-head"><div><span className="kicker">Operations test</span><h2>캐시·알림 테스트 도구</h2></div><span className="admin-badge light">DB 기록</span></div>
+            <p>실제 후원이 없어도 팬 캐시를 조정하고 카카오/X 발송 대기열을 테스트할 수 있습니다.</p>
+            <div className="admin-form-grid"><label>회원<select value={walletTool.userId} onChange={event => setWalletTool({ ...walletTool, userId: event.target.value })}><option value="">선택하세요</option>{members.map(member => <option key={member.id} value={member.id}>{member.displayName} · {member.email} · {Number(member.walletBalance || 0).toLocaleString()}캐시</option>)}</select></label><label>증감 캐시<input type="number" value={walletTool.delta} onChange={event => setWalletTool({ ...walletTool, delta: event.target.value })} /></label><label>사유<input value={walletTool.reason} onChange={event => setWalletTool({ ...walletTool, reason: event.target.value })} /></label><button className="solid-button" type="button" disabled={!walletTool.userId || !Number(walletTool.delta)} onClick={async () => { const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null; const response = await fetch(`${API}/api/admin/wallets/${walletTool.userId}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ delta: Number(walletTool.delta), reason: walletTool.reason }) }); const result = await response.json(); if (response.ok) { setMembers(current => current.map(member => member.id === walletTool.userId ? { ...member, walletBalance: result.balance } : member)); alert(`보유 캐시를 ${result.balance.toLocaleString()}으로 변경했습니다.`); } else setDataError('캐시 조정에 실패했습니다.'); }}>캐시 반영</button></div>
+            <div className="admin-form-grid"><label>셀럽<select value={noticeTool.creatorId} onChange={event => setNoticeTool({ ...noticeTool, creatorId: event.target.value })}><option value="">선택하세요</option>{creators.map(creator => <option key={creator.id} value={creator.id}>{creator.displayName}</option>)}</select></label><label>채널<select value={noticeTool.channel} onChange={event => setNoticeTool({ ...noticeTool, channel: event.target.value })}><option value="KAKAO">Kakao</option><option value="X">X</option></select></label><label>알림 문구<input value={noticeTool.body} onChange={event => setNoticeTool({ ...noticeTool, body: event.target.value })} /></label><button className="ghost-button" type="button" disabled={!noticeTool.creatorId || !noticeTool.body} onClick={async () => { const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null; const response = await fetch(`${API}/api/admin/notifications/test`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify(noticeTool) }); const result = await response.json(); alert(response.ok ? `알림 기록 생성: ${result.status}` : '알림 테스트에 실패했습니다.'); }}>테스트 알림 작성</button></div>
+          </section>
+          )}
+
           {(showDashboard || section === 'payments') && (
           <section className="admin-panel admin-panel-wide">
             <div className="admin-panel-head">
@@ -2334,6 +2438,7 @@ function Admin({
             </div>
             <CreatorSignupTable creators={mergedCreators} />
             <CreatorApplicationTable applications={members.filter(member => member.role === 'CREATOR' && member.application)} onReview={reviewCreatorApplication} />
+            <div className="bank-verification-list"><h3>정산 계좌 인증</h3>{members.filter(member => member.role === 'CREATOR').map(member => <div key={member.id}><span><b>{member.displayName}</b><small>{member.application?.bankName || '-'} · {member.application?.accountHolder || '-'} · {member.application?.accountNumber || '-'}</small></span><button className={member.bankVerified ? 'ghost-button' : 'solid-button'} type="button" onClick={async () => { const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null; const verified = !member.bankVerified; const response = await fetch(`${API}/api/admin/creators/${member.id}/bank-verification`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored?.token || ''}` }, body: JSON.stringify({ verified }) }); if (response.ok) setMembers(current => current.map(item => item.id === member.id ? { ...item, bankVerified: verified } : item)); }}>{member.bankVerified ? '인증 해제' : '계좌 인증'}</button></div>)}</div>
           </section>
           )}
 

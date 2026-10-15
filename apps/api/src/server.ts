@@ -472,6 +472,43 @@ function dbCreatorSummary(creator: any, galleryImages: string[] = []) {
   };
 }
 
+async function readJsonSetting<T>(key: string, fallback: T): Promise<T> {
+  if (!dbReady()) return fallback;
+  const row = await prisma!.adminSetting.findUnique({ where: { key } });
+  if (!row) return fallback;
+  try { return JSON.parse(row.value) as T; } catch { return fallback; }
+}
+
+async function writeJsonSetting(key: string, value: unknown) {
+  if (!dbReady()) throw new Error('DATABASE_REQUIRED');
+  const serialized = JSON.stringify(value);
+  await prisma!.adminSetting.upsert({ where: { key }, update: { value: serialized }, create: { key, value: serialized } });
+}
+
+const creatorExtrasKey = (userId: string) => `creatorExtras:${userId}`;
+const productMetaKey = (productId: string) => `productMeta:${productId}`;
+const fanPreferenceKey = (creatorId: string, fanId: string) => `fanPreference:${creatorId}:${fanId}`;
+const bankVerificationKey = (userId: string) => `bankVerified:${userId}`;
+
+async function queueIntegration(channel: 'KAKAO' | 'X', body: string, creatorId: string, meta: Record<string, unknown> = {}) {
+  const id = `notice-${nanoid(12)}`;
+  const webhook = channel === 'KAKAO' ? process.env.KAKAO_NOTIFICATION_WEBHOOK_URL : process.env.X_POST_WEBHOOK_URL;
+  const record: Record<string, unknown> = { id, channel, creatorId, body, meta, status: webhook ? 'SENDING' : 'WAITING_FOR_CONNECTION', createdAt: new Date().toISOString() };
+  await writeJsonSetting(`notificationOutbox:${id}`, record);
+  if (!webhook) return record;
+  try {
+    const response = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) });
+    record.status = response.ok ? 'SENT' : 'FAILED';
+    record.responseStatus = response.status;
+  } catch (error) {
+    record.status = 'FAILED';
+    record.error = error instanceof Error ? error.message : 'WEBHOOK_FAILED';
+  }
+  record.updatedAt = new Date().toISOString();
+  await writeJsonSetting(`notificationOutbox:${id}`, record);
+  return record;
+}
+
 function dbOrderToSupport(order: any): Support & { creatorName?: string; creatorHandle?: string } {
   return {
     id: order.orderNo,
@@ -640,18 +677,29 @@ app.get('/api/payouts/me', async (req, res) => {
   const application = dbReady() ? await prisma!.adminSetting.findUnique({ where: { key: `creatorApplication:${user.id}` } }) : null;
   let payout: Record<string, string> = {};
   try { payout = application ? JSON.parse(application.value) : {}; } catch { payout = {}; }
-  res.json({ creator: { name: user.name, email: user.email, bankName: payout.bankName || '', accountHolder: payout.accountHolder || '', accountNumber: payout.accountNumber || '', payoutAccount: payout.payoutAccount || '' }, agreement, requests });
+  const creatorProfile = dbReady() ? await prisma!.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+  const paidOrders = creatorProfile && dbReady() ? await prisma!.digitalOrder.findMany({ where: { creatorId: creatorProfile.id, status: 'PAID' } }) : [];
+  const earnings = paidOrders.reduce((sum, order) => sum + order.creatorPayout, 0);
+  const committed = requests.filter(item => ['PENDING', 'APPROVED', 'PAID'].includes(item.status)).reduce((sum, item) => sum + item.amount, 0);
+  const bankVerified = await readJsonSetting(bankVerificationKey(user.id), false);
+  res.json({ creator: { name: user.name, email: user.email, bankName: payout.bankName || '', accountHolder: payout.accountHolder || '', accountNumber: payout.accountNumber || '', payoutAccount: payout.payoutAccount || '' }, agreement, requests, earnings, available: Math.max(0, earnings - committed), bankVerified, minimumAmount: 50000, processingDays: { min: 3, max: 10 } });
 });
 app.post('/api/payouts/requests', async (req, res) => {
   const user = await getUserFromRequest(req);
   if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
   const parsed = PayoutRequestSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'INVALID_PAYOUT_REQUEST' });
-  const agreement = await getPayoutAgreement(user.id);
+  const creator = dbReady() ? await prisma!.creatorProfile.findUnique({ where: { userId: user.id } }) : null;
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const bankVerified = await readJsonSetting(bankVerificationKey(user.id), false);
+  if (!bankVerified) return res.status(409).json({ code: 'BANK_VERIFICATION_REQUIRED' });
+  if (parsed.data.amount < 50000) return res.status(409).json({ code: 'MINIMUM_PAYOUT', minimumAmount: 50000 });
+  const paidOrders = await prisma!.digitalOrder.findMany({ where: { creatorId: creator.id, status: 'PAID' } });
+  const earnings = paidOrders.reduce((sum, order) => sum + order.creatorPayout, 0);
   const requests = (await getPayoutRequestList()).filter(item => item.creatorId === user.id && ['PENDING', 'APPROVED'].includes(item.status));
   const committed = requests.reduce((sum, item) => sum + item.amount, 0);
-  if (parsed.data.amount + committed > agreement.amount) return res.status(409).json({ code: 'AGREEMENT_AMOUNT_EXCEEDED', available: Math.max(0, agreement.amount - committed) });
-  const record = { id: `payout-${nanoid(12)}`, creatorId: user.id, ...parsed.data, status: 'PENDING' as const, createdAt: new Date().toISOString() };
+  if (parsed.data.amount + committed > earnings) return res.status(409).json({ code: 'EARNINGS_EXCEEDED', available: Math.max(0, earnings - committed) });
+  const record = { id: `payout-${nanoid(12)}`, creatorId: user.id, ...parsed.data, status: 'PENDING' as const, estimatedDays: '3-10', createdAt: new Date().toISOString() };
   if (dbReady()) await prisma!.adminSetting.create({ data: { key: payoutRequestKey(record.id), value: JSON.stringify(record) } });
   else payoutRequests.unshift(record);
   res.status(201).json(record);
@@ -903,7 +951,11 @@ app.get('/api/creators/:slug', async (req, res) => {
         galleryImages = [];
       }
     }
-    return res.json(dbCreatorSummary(creator, galleryImages));
+    const extras = creator.userId ? await readJsonSetting(creatorExtrasKey(creator.userId), { socialLinks: {}, xAutoPost: false }) : { socialLinks: {}, xAutoPost: false };
+    const summary = dbCreatorSummary(creator, galleryImages);
+    const productMeta = await Promise.all((creator.digitalProducts ?? []).map((item: any) => readJsonSetting(productMetaKey(item.id), { type: 'GIFT', quantity: 1 })));
+    summary.wishlist = summary.wishlist.map((item: any, index: number) => ({ ...item, type: (productMeta[index] as any).type || 'GIFT', quantity: (productMeta[index] as any).quantity ?? 1, locked: (productMeta[index] as any).type === 'BLIND_DM' }));
+    return res.json({ ...summary, socialLinks: (extras as any).socialLinks || {} });
   }
   const creator = creators.find(item => item.slug === req.params.slug || item.id === req.params.slug);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
@@ -1329,6 +1381,103 @@ app.get('/api/supports', async (_req, res) => {
   }
   res.json(supports);
 });
+
+const CreatorExtrasSchema = z.object({
+  socialLinks: z.record(z.string(), z.string().max(300)).default({}),
+  xAutoPost: z.boolean().default(false),
+  xPostTemplate: z.string().max(300).default('{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}')
+});
+const ProductSchema = z.object({
+  title: z.string().trim().min(1).max(80), description: z.string().max(600).default(''),
+  pointPrice: z.number().int().min(100).max(100000000), imageUrl: CreatorPhotoSchema.optional(),
+  type: z.enum(['GIFT', 'CALLING', 'BLIND_DM', 'PHOTOSET']).default('GIFT'), quantity: z.number().int().min(1).max(999).default(1),
+  collection: z.string().max(60).default(''), secretText: z.string().max(3000).default(''), secretMediaUrl: z.string().max(1000).default(''),
+  isActive: z.boolean().default(true)
+});
+
+app.get('/api/creators/me/extras', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  res.json(await readJsonSetting(creatorExtrasKey(user.id), { socialLinks: {}, xAutoPost: false, xPostTemplate: '{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}' }));
+});
+app.put('/api/creators/me/extras', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = CreatorExtrasSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_CREATOR_EXTRAS' });
+  await writeJsonSetting(creatorExtrasKey(user.id), parsed.data);
+  res.json(parsed.data);
+});
+app.get('/api/creators/me/products', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id }, include: { digitalProducts: { orderBy: { createdAt: 'desc' } } } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const products = await Promise.all(creator.digitalProducts.map(async item => ({ ...item, ...(await readJsonSetting(productMetaKey(item.id), { type: 'GIFT', quantity: 1, collection: '', secretText: '', secretMediaUrl: '' })) })));
+  res.json(products);
+});
+app.post('/api/creators/me/products', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = ProductSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_PRODUCT', issues: parsed.error.issues });
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  const { type, quantity, collection, secretText, secretMediaUrl, ...data } = parsed.data;
+  const product = await prisma!.digitalProduct.create({ data: { creatorId: creator.id, ...data } });
+  const meta = { type, quantity, collection, secretText, secretMediaUrl };
+  await writeJsonSetting(productMetaKey(product.id), meta);
+  res.status(201).json({ ...product, ...meta });
+});
+app.put('/api/creators/me/products/:id', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = ProductSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_PRODUCT' });
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+  const existing = creator ? await prisma!.digitalProduct.findFirst({ where: { id: req.params.id, creatorId: creator.id } }) : null;
+  if (!existing) return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+  const { type, quantity, collection, secretText, secretMediaUrl, ...data } = parsed.data;
+  const product = await prisma!.digitalProduct.update({ where: { id: existing.id }, data });
+  const meta = { type, quantity, collection, secretText, secretMediaUrl };
+  await writeJsonSetting(productMetaKey(product.id), meta);
+  res.json({ ...product, ...meta });
+});
+
+app.get('/api/wallet/me', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ code: 'UNAUTHORIZED' });
+  const wallet = await prisma!.pointWallet.upsert({ where: { userId: user.id }, update: {}, create: { userId: user.id, balance: 0 } });
+  res.json({ balance: wallet.balance, currency: 'CASH' });
+});
+app.post('/api/wallet/support', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'FAN') return res.status(403).json({ code: 'FAN_ONLY' });
+  const parsed = z.object({ productId: z.string().min(1), message: z.string().max(500).default('') }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_SUPPORT' });
+  const product = await prisma!.digitalProduct.findFirst({ where: { id: parsed.data.productId, isActive: true }, include: { creator: true } });
+  if (!product) return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+  const rate = await getCommissionRate();
+  const adminFee = Math.round(product.pointPrice * rate / 100);
+  const order = await prisma!.$transaction(async tx => {
+    const wallet = await tx.pointWallet.findUnique({ where: { userId: user.id } });
+    if (!wallet || wallet.balance < product.pointPrice) throw new Error('INSUFFICIENT_BALANCE');
+    await tx.pointWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: product.pointPrice } } });
+    return tx.digitalOrder.create({ data: { orderNo: `cash_${nanoid(12)}`, creatorId: product.creatorId, productId: product.id, fanId: user.id, purchaserName: user.name, purchaserEmail: user.email, message: parsed.data.message, pointAmount: product.pointPrice, paymentProvider: 'EON_CASH', paymentKey: `wallet_${nanoid(12)}`, status: 'PAID', commissionRate: rate, adminFee, creatorPayout: product.pointPrice - adminFee, paidAt: new Date() } });
+  }).catch(error => error instanceof Error && error.message === 'INSUFFICIENT_BALANCE' ? null : Promise.reject(error));
+  if (!order) return res.status(409).json({ code: 'INSUFFICIENT_BALANCE' });
+  const meta = await readJsonSetting(productMetaKey(product.id), { type: 'GIFT' });
+  const preference = await readJsonSetting(fanPreferenceKey(product.creatorId, user.id), { blocked: false, muted: false });
+  const extras = product.creator.userId ? await readJsonSetting(creatorExtrasKey(product.creator.userId), { xAutoPost: false, xPostTemplate: '' }) : { xAutoPost: false, xPostTemplate: '' };
+  const alertBody = `${preference.blocked ? '차단된 사용자 ' : ''}${user.name}님이 ${product.title} ${product.pointPrice.toLocaleString()}캐시를 후원했습니다.`;
+  if ((meta as any).type === 'CALLING') await queueIntegration('KAKAO', alertBody, product.creatorId, { orderId: order.orderNo, blocked: preference.blocked });
+  if ((extras as any).xAutoPost) {
+    const template = (extras as any).xPostTemplate || '{fan}님이 {creator}님에게 {item}을 후원했습니다. {url}';
+    const body = template.replace('{fan}', user.name).replace('{creator}', product.creator.displayName).replace('{item}', product.title).replace('{url}', `${process.env.PUBLIC_WEB_URL || 'https://eon8.co.kr'}/#creator/${product.creator.slug}`);
+    await queueIntegration('X', body, product.creatorId, { orderId: order.orderNo });
+  }
+  res.status(201).json({ orderId: order.orderNo, balanceUsed: product.pointPrice, status: 'PAID' });
+});
 app.get('/api/payments/orders', async (req, res) => {
   const viewer = await getUserFromRequest(req);
   if (viewer?.role !== 'ADMIN') return res.status(403).json({ code: 'FORBIDDEN' });
@@ -1373,11 +1522,18 @@ app.get('/api/fan/orders', async (req, res) => {
   const rows = await prisma!.digitalOrder.findMany({
     where: { fanId: user.id }, include: { creator: true, product: true }, orderBy: { createdAt: 'desc' }, take: 100
   });
-  res.json(rows.map((order: any) => ({
-    id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
-    message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
-    status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null
-  })));
+  const result = await Promise.all(rows.map(async (order: any) => {
+    const meta = order.productId ? await readJsonSetting(productMetaKey(order.productId), { type: 'GIFT', secretText: '', secretMediaUrl: '' }) : { type: 'GIFT', secretText: '', secretMediaUrl: '' };
+    const unlocked = order.status === 'PAID' && (meta as any).type === 'BLIND_DM';
+    return {
+      id: order.orderNo, creator: order.creator.displayName, product: order.product?.title || '응원 메시지',
+      message: order.message || '', amount: order.pointAmount, paymentProvider: order.paymentProvider,
+      status: order.status, createdAt: order.createdAt.toISOString(), paidAt: order.paidAt?.toISOString() || null,
+      contentType: (meta as any).type, unlocked, secretText: unlocked ? (meta as any).secretText : undefined,
+      secretMediaUrl: unlocked ? (meta as any).secretMediaUrl : undefined
+    };
+  }));
+  res.json(result);
 });
 app.get('/api/creators/me/orders', async (req, res) => {
   const user = await getUserFromRequest(req);
@@ -1392,8 +1548,9 @@ app.get('/api/creators/me/orders', async (req, res) => {
     orderBy: { createdAt: 'desc' },
     take: 200
   });
-  res.json(rows.map(order => ({
+  const mapped = await Promise.all(rows.map(async order => ({
     id: order.orderNo,
+    fanId: order.fanId || '',
     fanName: order.fan?.displayName || order.purchaserName,
     fanEmail: order.fan?.email || order.purchaserEmail || '',
     product: order.product?.title || '후원',
@@ -1404,8 +1561,20 @@ app.get('/api/creators/me/orders', async (req, res) => {
     status: order.status,
     payoutStatus: order.payoutStatus,
     createdAt: order.createdAt.toISOString(),
-    paidAt: order.paidAt?.toISOString() || null
+    paidAt: order.paidAt?.toISOString() || null,
+    ...(order.fanId ? await readJsonSetting(fanPreferenceKey(creator.id, order.fanId), { blocked: false, muted: false }) : { blocked: false, muted: false })
   })));
+  res.json(mapped);
+});
+app.post('/api/creators/me/fans/:fanId/preferences', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'CREATOR') return res.status(403).json({ code: 'CREATOR_ONLY' });
+  const parsed = z.object({ blocked: z.boolean(), muted: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_PREFERENCES' });
+  const creator = await prisma!.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_PROFILE_NOT_FOUND' });
+  await writeJsonSetting(fanPreferenceKey(creator.id, req.params.fanId), parsed.data);
+  res.json(parsed.data);
 });
 app.get('/api/admin/users', async (_req, res) => {
   if (!dbReady()) return res.json(users.map(publicUser));
@@ -1418,9 +1587,42 @@ app.get('/api/admin/users', async (_req, res) => {
     let applicationData: Record<string, any> | undefined;
     try { applicationData = application ? JSON.parse(application.value) : undefined; } catch { applicationData = undefined; }
     if (applicationData) applicationData.reviewStatus ||= user.creatorProfile?.isActive ? 'APPROVED' : 'PENDING';
-    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, application: applicationData, createdAt: user.createdAt };
+    const wallet = await prisma!.pointWallet.findUnique({ where: { userId: user.id } });
+    const bankVerified = user.role === 'CREATOR' ? await readJsonSetting(bankVerificationKey(user.id), false) : undefined;
+    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role, grade: user.grade, profileImage: user.profileImage, instagramId: user.instagramId, youtubeUrl: user.youtubeUrl, walletBalance: wallet?.balance || 0, bankVerified, application: applicationData, createdAt: user.createdAt };
   }));
   res.json(usersWithApplications);
+});
+app.post('/api/admin/wallets/:userId/adjust', async (req, res) => {
+  const parsed = z.object({ delta: z.number().int().min(-100000000).max(100000000).refine(value => value !== 0), reason: z.string().min(2).max(200) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_WALLET_ADJUSTMENT' });
+  const user = await prisma!.user.findUnique({ where: { id: req.params.userId } });
+  if (!user) return res.status(404).json({ code: 'USER_NOT_FOUND' });
+  const wallet = await prisma!.pointWallet.upsert({ where: { userId: user.id }, update: {}, create: { userId: user.id, balance: 0 } });
+  if (wallet.balance + parsed.data.delta < 0) return res.status(409).json({ code: 'NEGATIVE_BALANCE', balance: wallet.balance });
+  const updated = await prisma!.$transaction(async tx => {
+    const next = await tx.pointWallet.update({ where: { id: wallet.id }, data: { balance: { increment: parsed.data.delta } } });
+    await tx.pointCharge.create({ data: { walletId: wallet.id, points: parsed.data.delta, amount: 0, paymentProvider: `ADMIN:${parsed.data.reason}`, paymentKey: `adjust_${nanoid(10)}`, status: 'PAID' } });
+    return next;
+  });
+  res.json({ userId: user.id, balance: updated.balance, delta: parsed.data.delta, reason: parsed.data.reason });
+});
+app.post('/api/admin/creators/:userId/bank-verification', async (req, res) => {
+  const parsed = z.object({ verified: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_BANK_VERIFICATION' });
+  const user = await prisma!.user.findUnique({ where: { id: req.params.userId } });
+  if (!user || user.role !== 'CREATOR') return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  await writeJsonSetting(bankVerificationKey(user.id), parsed.data.verified);
+  res.json({ userId: user.id, verified: parsed.data.verified });
+});
+app.post('/api/admin/notifications/test', async (req, res) => {
+  const parsed = z.object({ creatorId: z.string().min(1), channel: z.enum(['KAKAO', 'X']), body: z.string().min(1).max(500) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_NOTIFICATION' });
+  res.status(201).json(await queueIntegration(parsed.data.channel, parsed.data.body, parsed.data.creatorId, { test: true }));
+});
+app.get('/api/admin/notifications', async (_req, res) => {
+  const rows = await prisma!.adminSetting.findMany({ where: { key: { startsWith: 'notificationOutbox:' } }, orderBy: { updatedAt: 'desc' }, take: 200 });
+  res.json(rows.map(row => { try { return JSON.parse(row.value); } catch { return { id: row.key, status: 'INVALID' }; } }));
 });
 app.post('/api/admin/creator-applications/:userId/review', async (req, res) => {
   const parsed = z.object({ status: z.enum(['PENDING', 'APPROVED', 'ON_HOLD']), reviewNote: z.string().max(500).optional().default('') }).safeParse(req.body);
