@@ -143,7 +143,7 @@ type PaymentOrderResponse = {
 
 const API =
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL : '') ||
-  (typeof location !== 'undefined' ? (location.hostname === 'localhost' ? 'http://localhost:4000' : location.origin) : '');
+  (typeof location !== 'undefined' ? (location.hostname === 'localhost' ? 'http://localhost:4000' : location.origin === 'https://eon8.co.kr' || location.origin === 'https://www.eon8.co.kr' ? 'https://influencer-korea-production.up.railway.app' : location.origin) : '');
 const LITTLY_CHECKOUT_URL =
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL : '') ||
   'https://litt.ly/eon8';
