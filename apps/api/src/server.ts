@@ -630,6 +630,27 @@ const LittlyPaymentEmailSchema = z.object({
   receivedAt: z.string().datetime().optional()
 });
 
+async function confirmLittlyOrder(orderNo: string, options: { amount?: number; paymentKey?: string; source: string }) {
+  if (!dbReady()) throw new Error('DATABASE_REQUIRED');
+  return prisma!.$transaction(async tx => {
+    const order = await tx.digitalOrder.findUnique({ where: { orderNo }, include: { creator: true } });
+    if (!order) throw new Error('ORDER_NOT_FOUND');
+    if (options.amount !== undefined && options.amount !== order.pointAmount) throw new Error('AMOUNT_MISMATCH');
+    if (order.status === 'PAID') return { order, alreadyConfirmed: true };
+    if (order.status !== 'PENDING_PAYMENT') throw new Error('ORDER_NOT_PAYABLE');
+    const paidAt = new Date();
+    const updated = await tx.digitalOrder.update({
+      where: { id: order.id },
+      data: { status: 'PAID', paidAt, paymentKey: options.paymentKey || order.paymentKey }
+    });
+    const eventId = `littly-confirm-${nanoid(12)}`;
+    await tx.adminSetting.create({ data: { key: `paymentEvent:${eventId}`, value: JSON.stringify({
+      id: eventId, orderNo, amount: order.pointAmount, source: options.source, status: 'PAID', createdAt: paidAt.toISOString()
+    }) } });
+    return { order: { ...updated, creator: order.creator }, alreadyConfirmed: false };
+  });
+}
+
 // Littly does not expose a public payment webhook. Make/Zapier can forward
 // the seller notification email here without exposing mailbox credentials.
 app.post('/api/integrations/littly/payment-email', async (req, res) => {
@@ -640,13 +661,47 @@ app.post('/api/integrations/littly/payment-email', async (req, res) => {
   const parsed = LittlyPaymentEmailSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'INVALID_EMAIL_PAYLOAD' });
   const id = `littly-email-${nanoid(14)}`;
-  const record = { id, ...parsed.data, receivedAt: parsed.data.receivedAt || new Date().toISOString(), status: 'RECEIVED' };
+  const combined = `${parsed.data.subject}\n${parsed.data.text}`;
+  const orderNo = combined.match(/\b(?:ord|cash)_[A-Za-z0-9_-]{6,}\b/)?.[0];
+  const record = { id, ...parsed.data, receivedAt: parsed.data.receivedAt || new Date().toISOString(), status: 'RECEIVED', orderNo: orderNo || null };
   if (dbReady()) {
+    if (orderNo) {
+      try {
+        const result = await confirmLittlyOrder(orderNo, { source: 'LITTLY_EMAIL_FORWARDER' });
+        record.status = result.alreadyConfirmed ? 'ALREADY_CONFIRMED' : 'AUTO_CONFIRMED';
+      } catch (error) {
+        record.status = error instanceof Error ? error.message : 'CONFIRMATION_FAILED';
+      }
+    } else {
+      record.status = 'ORDER_ID_NOT_FOUND';
+    }
     await prisma!.adminSetting.create({ data: { key: `littlyPaymentEmail:${id}`, value: JSON.stringify(record) } });
   } else {
     paymentEmailEvents.unshift(record);
   }
-  res.status(202).json({ id, status: 'RECEIVED' });
+  res.status(202).json({ id, status: record.status, orderId: record.orderNo });
+});
+
+const LittlyWebhookSchema = z.object({
+  orderId: z.string().min(6).max(100),
+  amount: z.number().int().positive(),
+  status: z.enum(['PAID', 'paid', 'COMPLETED', 'completed']),
+  paymentKey: z.string().max(200).optional()
+});
+
+app.post('/api/integrations/littly/payment-webhook', async (req, res) => {
+  const secret = process.env.LITTLY_WEBHOOK_SECRET || process.env.LITTLY_INBOUND_EMAIL_SECRET;
+  if (!secret || req.header('x-littly-webhook-secret') !== secret) return res.status(401).json({ code: 'INVALID_WEBHOOK_SECRET' });
+  const parsed = LittlyWebhookSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_WEBHOOK_PAYLOAD' });
+  try {
+    const result = await confirmLittlyOrder(parsed.data.orderId, { amount: parsed.data.amount, paymentKey: parsed.data.paymentKey, source: 'LITTLY_WEBHOOK' });
+    res.json({ orderId: result.order.orderNo, status: 'PAID', alreadyConfirmed: result.alreadyConfirmed });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'CONFIRMATION_FAILED';
+    const status = code === 'ORDER_NOT_FOUND' ? 404 : code === 'AMOUNT_MISMATCH' || code === 'ORDER_NOT_PAYABLE' ? 409 : 503;
+    res.status(status).json({ code });
+  }
 });
 
 const PayoutRequestSchema = z.object({ amount: z.number().int().positive(), note: z.string().max(300).optional().default('') });
@@ -709,13 +764,27 @@ app.use(['/api/payments/orders', '/api/payments/confirm', '/api/supports'], (req
   next();
 });
 
-app.get('/api/admin/pg-status', (_req, res) => {
+function littlyPaymentStatus() {
   const checkoutUrl = process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL || process.env.LITTLY_CHECKOUT_URL || 'https://litt.ly/eon8';
-  res.json({ provider: 'Littly', ready: Boolean(checkoutUrl) && dbReady(), mode: 'LINK_CHECKOUT',
+  const automaticConfirmationReady = Boolean(process.env.LITTLY_WEBHOOK_SECRET || process.env.LITTLY_INBOUND_EMAIL_SECRET);
+  const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  return { provider: 'Littly', ready: Boolean(checkoutUrl) && dbReady(), mode: 'LINK_CHECKOUT',
     credentialsConfigured: Boolean(checkoutUrl),
+    automaticConfirmationReady,
     callbackUrl: null,
-    webhookUrl: null,
-    checkoutVerified: false, refundVerified: false, payoutEnabled: false });
+    webhookUrl: publicAppUrl ? `${publicAppUrl}/api/integrations/littly/payment-webhook` : null,
+    checkoutUrl,
+    message: automaticConfirmationReady ? '결제 완료 자동 확인이 연결되어 있습니다.' : '결제 자동 확인용 웹훅 또는 이메일 전달 시크릿을 설정해 주세요.',
+    checkoutVerified: automaticConfirmationReady, refundVerified: false, payoutEnabled: false };
+}
+
+app.get('/api/payments/config', (_req, res) => {
+  const status = littlyPaymentStatus();
+  res.json(status);
+});
+
+app.get('/api/admin/pg-status', (_req, res) => {
+  res.json(littlyPaymentStatus());
 });
 
 function creatorSummary(creator: Creator) {
@@ -1281,10 +1350,40 @@ app.post('/api/payments/littly-checkout', async (req, res) => {
     productId: z.string(),
     supporterName: z.string().max(100),
     message: z.string().max(500).optional().default(''),
-    amount: z.number().positive()
+    amount: z.number().positive().optional()
   }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR' });
-  const { creatorId, productId, supporterName, message, amount } = parsed.data;
+  const { creatorId, productId, supporterName, message } = parsed.data;
+  const checkoutBase = process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL || process.env.LITTLY_CHECKOUT_URL || 'https://litt.ly/eon8';
+  if (dbReady()) {
+    await seedDatabase();
+    const product = await prisma!.digitalProduct.findFirst({
+      where: { id: productId, isActive: true, creator: { isActive: true } },
+      include: { creator: true }
+    });
+    if (!product) return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+    if (![product.creatorId, product.creator.slug].includes(creatorId)) return res.status(409).json({ code: 'PRODUCT_CREATOR_MISMATCH' });
+    const amount = product.pointPrice;
+    const commissionRate = await getCommissionRate();
+    const adminFee = Math.round((amount * commissionRate) / 100);
+    const creatorPayout = amount - adminFee;
+    const orderId = `ord_${nanoid(12)}`;
+    const paymentKey = `littly_${nanoid(8)}`;
+    await prisma!.digitalOrder.create({ data: {
+      orderNo: orderId, fanId: user.id, creatorId: product.creatorId, productId: product.id,
+      purchaserName: supporterName, purchaserEmail: user.email, message,
+      pointAmount: amount, paymentProvider: 'LITTLY', paymentKey,
+      status: 'PENDING_PAYMENT', commissionRate, adminFee, creatorPayout, payoutStatus: 'PENDING'
+    }});
+    const checkoutUrl = new URL(checkoutBase);
+    checkoutUrl.searchParams.set('orderId', orderId);
+    checkoutUrl.searchParams.set('amount', String(amount));
+    checkoutUrl.searchParams.set('product', product.title);
+    return res.status(201).json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: checkoutUrl.toString() });
+  }
+
+  const amount = parsed.data.amount;
+  if (!amount) return res.status(503).json({ code: 'DATABASE_REQUIRED' });
   const creator = creators.find(c => c.id === creatorId);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
   const product = creator.wishlist.find(w => w.id === productId);
@@ -1300,22 +1399,8 @@ app.post('/api/payments/littly-checkout', async (req, res) => {
     payoutDestination: 'ADMIN_DASHBOARD', payoutStatus: 'PENDING',
     createdAt: new Date().toISOString()
   };
-  if (dbReady()) {
-    await seedDatabase();
-    const dbCreator = await prisma!.creatorProfile.findFirst({ where: { slug: creator.slug } });
-    if (dbCreator) {
-      await prisma!.digitalOrder.create({ data: {
-        orderNo: orderId, fanId: user.id, creatorId: dbCreator.id,
-        productId: product ? productId : undefined,
-        purchaserName: supporterName, purchaserEmail: user.email,
-        pointAmount: amount, paymentProvider: 'LITTLY', paymentKey: order.paymentKey,
-        status: 'PENDING_PAYMENT', adminFee, creatorPayout, payoutStatus: 'PENDING',
-        message
-      }});
-    }
-  }
   paymentOrders.unshift(order);
-  res.json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: process.env.NEXT_PUBLIC_LITTLY_CHECKOUT_URL || 'https://litt.ly/eon8' });
+  res.json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: checkoutBase });
 });
 
 app.post('/api/admin/littly-confirm/:orderId', async (req, res) => {
@@ -1324,11 +1409,13 @@ app.post('/api/admin/littly-confirm/:orderId', async (req, res) => {
   const { orderId } = req.params;
   const now = new Date().toISOString();
   if (dbReady()) {
-    const row = await prisma!.digitalOrder.findFirst({ where: { orderNo: orderId } });
-    if (!row) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
-    if (row.status === 'PAID') return res.json({ orderId, status: 'PAID', message: 'already confirmed' });
-    await prisma!.digitalOrder.update({ where: { id: row.id }, data: { status: 'PAID', paidAt: new Date() } });
-    return res.json({ orderId, status: 'PAID', paidAt: now });
+    try {
+      const result = await confirmLittlyOrder(orderId, { source: 'ADMIN_MANUAL_CONFIRMATION' });
+      return res.json({ orderId, status: 'PAID', paidAt: result.order.paidAt, alreadyConfirmed: result.alreadyConfirmed });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'CONFIRMATION_FAILED';
+      return res.status(code === 'ORDER_NOT_FOUND' ? 404 : code === 'ORDER_NOT_PAYABLE' ? 409 : 503).json({ code });
+    }
   }
   const order = paymentOrders.find(o => o.id === orderId);
   if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
