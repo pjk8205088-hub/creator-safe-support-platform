@@ -55,8 +55,8 @@ model CreatorProfile {
   bio             String
   category        String           @default("creator")
   platform        String           @default("Instagram")
-  avatarUrl       String
-  coverUrl        String
+  avatarUrl       String           @db.VarChar(500)
+  coverUrl        String           @db.VarChar(500)
   instagramId     String?
   youtubeUrl      String?
   safeAddressMemo String?
@@ -72,7 +72,7 @@ model DigitalProduct {
   id          String         @id @default(cuid())
   creatorId   String
   title       String
-  imageUrl    String?
+  imageUrl    String?  @db.VarChar(500)
   description String?
   pointPrice  Int
   priority    Int            @default(0)
