@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
-import { dLocalConfig } from './dlocal.js';
+import { dLocalConfig, dLocalRequest } from './dlocal.js';
 
 type UserRole = 'FAN' | 'CREATOR' | 'ADMIN';
 type User = {
@@ -861,6 +861,81 @@ app.get('/api/payments/dlocal-config', (_req, res) => {
   const config = dLocalConfig();
   res.json({ provider: 'DLOCAL', mode: config.mode, ready: config.ready, credentialsConfigured: config.ready,
     message: config.ready ? 'dLocal API is configured.' : 'dLocal Sandbox credentials are not configured yet.' });
+});
+
+const DLocalCheckoutSchema = z.object({
+  creatorId: z.string().min(1).max(100),
+  amount: z.number().positive().max(1000000),
+  currency: z.string().length(3).default('BRL'),
+  country: z.string().length(2).default('BR'),
+  purchaserName: z.string().min(2).max(120),
+  purchaserEmail: z.string().email().max(254),
+  purchaserPhone: z.string().max(40).optional(),
+  description: z.string().max(200).optional().default('H&G Agency service')
+});
+
+// dLocal checkout: creates a pending local order, then asks dLocal for PIX/card
+// payment instructions. This route is intentionally unavailable until sandbox
+// credentials are configured, so no real payment can be created accidentally.
+app.post('/api/payments/dlocal/checkout', async (req, res) => {
+  const config = dLocalConfig();
+  if (!config.ready) return res.status(503).json({ code: 'DLOCAL_NOT_CONFIGURED', message: 'dLocal Sandbox credentials are not configured yet.' });
+  const parsed = DLocalCheckoutSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
+  if (parsed.data.currency !== 'BRL' || parsed.data.country !== 'BR') return res.status(400).json({ code: 'BRAZIL_ONLY_CHECKOUT' });
+  if (!dbReady()) return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+
+  await seedDatabase();
+  const creator = await prisma!.creatorProfile.findFirst({ where: { OR: [{ id: parsed.data.creatorId }, { slug: parsed.data.creatorId }] } });
+  if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+  const amount = Math.round(parsed.data.amount * 100) / 100;
+  const order = await prisma!.digitalOrder.create({ data: {
+    orderNo: `dlocal_${nanoid(14)}`, creatorId: creator.id,
+    purchaserName: parsed.data.purchaserName, purchaserEmail: parsed.data.purchaserEmail,
+    message: parsed.data.description, pointAmount: Math.round(amount * 100),
+    paymentProvider: 'DLOCAL', paymentKey: null, commissionRate: 0, adminFee: 0, creatorPayout: 0
+  } });
+  const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  const payload = {
+    amount, currency: 'BRL', country: 'BR', order_id: order.orderNo,
+    payer: { name: parsed.data.purchaserName, email: parsed.data.purchaserEmail, phone: parsed.data.purchaserPhone },
+    description: parsed.data.description,
+    notification_url: publicAppUrl ? `${publicAppUrl}/api/integrations/dlocal/webhook` : undefined
+  };
+  try {
+    const payment = await dLocalRequest('/payments', payload, config);
+    const paymentId = typeof payment?.id === 'string' ? payment.id : undefined;
+    if (paymentId) await prisma!.digitalOrder.update({ where: { id: order.id }, data: { paymentKey: paymentId } });
+    return res.status(201).json({ orderId: order.orderNo, status: 'PENDING_PAYMENT', payment });
+  } catch (error) {
+    await prisma!.digitalOrder.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    const message = error instanceof Error ? error.message : 'DLOCAL_REQUEST_FAILED';
+    return res.status(502).json({ code: 'DLOCAL_REQUEST_FAILED', message });
+  }
+});
+
+const DLocalWebhookSchema = z.object({
+  id: z.string().max(200).optional(), order_id: z.string().min(6).max(100),
+  status: z.string().max(60), amount: z.number().optional(), currency: z.string().optional()
+});
+
+app.post('/api/integrations/dlocal/webhook', async (req, res) => {
+  const secret = process.env.DLOCAL_WEBHOOK_SECRET;
+  if (secret && req.header('x-dlocal-webhook-secret') !== secret) return res.status(401).json({ code: 'INVALID_WEBHOOK_SECRET' });
+  const parsed = DLocalWebhookSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'INVALID_DLOCAL_WEBHOOK' });
+  if (!dbReady()) return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+  const paid = ['PAID', 'APPROVED', 'COMPLETED', 'AUTHORIZED'].includes(parsed.data.status.toUpperCase());
+  const failed = ['REJECTED', 'CANCELLED', 'EXPIRED', 'FAILED'].includes(parsed.data.status.toUpperCase());
+  if (!paid && !failed) return res.status(202).json({ orderId: parsed.data.order_id, status: 'IGNORED' });
+  const order = await prisma!.digitalOrder.findUnique({ where: { orderNo: parsed.data.order_id } });
+  if (!order) return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+  if (parsed.data.amount !== undefined && Math.abs(parsed.data.amount * 100 - order.pointAmount) > 1) return res.status(409).json({ code: 'AMOUNT_MISMATCH' });
+  await prisma!.digitalOrder.update({ where: { id: order.id }, data: {
+    status: paid ? 'PAID' : 'CANCELLED', paidAt: paid ? (order.paidAt || new Date()) : null,
+    paymentKey: parsed.data.id || order.paymentKey
+  } });
+  return res.json({ orderId: order.orderNo, status: paid ? 'PAID' : 'CANCELLED' });
 });
 
 function creatorSummary(creator: Creator) {
