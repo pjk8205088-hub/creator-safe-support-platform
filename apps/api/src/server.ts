@@ -12,6 +12,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
+import { dLocalConfig } from './dlocal.js';
 
 type UserRole = 'FAN' | 'CREATOR' | 'ADMIN';
 type User = {
@@ -24,7 +25,7 @@ type User = {
   createdAt: string;
 };
 
-type OAuthProvider = 'kakao' | 'naver';
+type OAuthProvider = 'kakao' | 'naver' | 'google';
 const oauthStates = new Map<string, { provider: OAuthProvider; role: 'FAN' | 'CREATOR'; expiresAt: number }>();
 
 type Category = {
@@ -592,12 +593,19 @@ function oauthConfig(provider: OAuthProvider) {
     token: 'https://kauth.kakao.com/oauth/token',
     redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/kakao/callback`
   };
-  return {
+  if (provider === 'naver') return {
     clientId: process.env.NAVER_CLIENT_ID,
     clientSecret: process.env.NAVER_CLIENT_SECRET,
     authorize: 'https://nid.naver.com/oauth2.0/authorize',
     token: 'https://nid.naver.com/oauth2.0/token',
     redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/naver/callback`
+  };
+  return {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
+    token: 'https://oauth2.googleapis.com/token',
+    redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/google/callback`
   };
 }
 
@@ -614,11 +622,13 @@ async function exchangeOAuth(provider: OAuthProvider, code: string, state?: stri
   if (!tokenResponse.ok) throw new Error('OAUTH_TOKEN_EXCHANGE_FAILED');
   const token = await tokenResponse.json() as { access_token?: string };
   if (!token.access_token) throw new Error('OAUTH_TOKEN_MISSING');
-  const profileResponse = await fetch(provider === 'kakao' ? 'https://kapi.kakao.com/v2/user/me' : 'https://openapi.naver.com/v1/nid/me', { headers: { Authorization: `Bearer ${token.access_token}` } });
+  const profileUrl = provider === 'kakao' ? 'https://kapi.kakao.com/v2/user/me' : provider === 'naver' ? 'https://openapi.naver.com/v1/nid/me' : 'https://openidconnect.googleapis.com/v1/userinfo';
+  const profileResponse = await fetch(profileUrl, { headers: { Authorization: `Bearer ${token.access_token}` } });
   if (!profileResponse.ok) throw new Error('OAUTH_PROFILE_FAILED');
   const profile = await profileResponse.json() as any;
   if (provider === 'kakao') return { subject: String(profile.id), email: profile.kakao_account?.email, name: profile.kakao_account?.profile?.nickname || '카카오 사용자' };
-  return { subject: String(profile.response?.id), email: profile.response?.email, name: profile.response?.name || profile.response?.nickname || '네이버 사용자' };
+  if (provider === 'naver') return { subject: String(profile.response?.id), email: profile.response?.email, name: profile.response?.name || profile.response?.nickname || '네이버 사용자' };
+  return { subject: String(profile.sub), email: profile.email, name: profile.name || 'Google 사용자' };
 }
 
 async function upsertOAuthUser(provider: OAuthProvider, profile: { subject: string; email?: string; name: string }, role: 'FAN' | 'CREATOR') {
@@ -845,6 +855,12 @@ app.get('/api/payments/config', (_req, res) => {
 
 app.get('/api/admin/pg-status', (_req, res) => {
   res.json(littlyPaymentStatus());
+});
+
+app.get('/api/payments/dlocal-config', (_req, res) => {
+  const config = dLocalConfig();
+  res.json({ provider: 'DLOCAL', mode: config.mode, ready: config.ready, credentialsConfigured: config.ready,
+    message: config.ready ? 'dLocal API is configured.' : 'dLocal Sandbox credentials are not configured yet.' });
 });
 
 function creatorSummary(creator: Creator) {
@@ -1089,7 +1105,7 @@ app.get('/api/creators/:slug', async (req, res) => {
 
 app.get('/api/auth/oauth/:provider/start', (req, res) => {
   const provider = req.params.provider as OAuthProvider;
-  if (provider !== 'kakao' && provider !== 'naver') return res.status(404).json({ code: 'OAUTH_PROVIDER_NOT_SUPPORTED' });
+  if (!['kakao', 'naver', 'google'].includes(provider)) return res.status(404).json({ code: 'OAUTH_PROVIDER_NOT_SUPPORTED' });
   const config = oauthConfig(provider);
   if (!config.clientId) return res.status(503).json({ code: `${provider.toUpperCase()}_OAUTH_NOT_CONFIGURED` });
   const role = req.query.role === 'CREATOR' ? 'CREATOR' : 'FAN';
@@ -1101,7 +1117,7 @@ app.get('/api/auth/oauth/:provider/start', (req, res) => {
 
 app.get('/api/auth/oauth/:provider/callback', async (req, res) => {
   const provider = req.params.provider as OAuthProvider;
-  if (provider !== 'kakao' && provider !== 'naver') return oauthError(res, '지원하지 않는 로그인입니다.');
+  if (!['kakao', 'naver', 'google'].includes(provider)) return oauthError(res, '지원하지 않는 로그인입니다.');
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
   const saved = oauthStates.get(state);
