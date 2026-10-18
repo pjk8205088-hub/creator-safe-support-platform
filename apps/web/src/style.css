@@ -93,6 +93,31 @@ button {
   gap: 10px;
 }
 
+.discovery-deck { padding-top: 54px; padding-bottom: 44px; background: #fffdf8; }
+.discovery-topline { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
+.discovery-topline h2 { margin:8px 0 7px; font-size:clamp(1.7rem,3vw,2.65rem); letter-spacing:-.04em; }
+.discovery-topline p { margin:0; color:#687471; }
+.discovery-tabs { display:flex; gap:25px; margin-top:32px; border-bottom:1px solid #d9ded9; overflow:auto; }
+.discovery-tabs a { position:relative; padding:0 0 13px; color:#77827e; font-weight:900; white-space:nowrap; }
+.discovery-tabs a.active, .discovery-tabs a:hover { color:#087f70; }
+.discovery-tabs a.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:3px; background:#087f70; }
+.creator-rail { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-top:20px; }
+.creator-rail-card { min-width:0; overflow:hidden; border:1px solid #e0e2da; background:#f8f7f1; transition:transform .2s ease, border-color .2s ease; }
+.creator-rail-card:hover { transform:translateY(-4px); border-color:#0c8574; }
+.creator-rail-image { position:relative; aspect-ratio:1.08; overflow:hidden; background:#e8e7de; }
+.creator-rail-image img { width:100%; height:100%; object-fit:cover; }
+.creator-rail-image span { position:absolute; top:9px; left:9px; padding:4px 7px; color:#fff; background:#172023; font-size:9px; font-weight:900; letter-spacing:.08em; }
+.creator-rail-copy { padding:12px; }
+.creator-rail-copy strong, .creator-rail-copy small, .creator-rail-copy p { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.creator-rail-copy strong { font-size:1rem; }
+.creator-rail-copy small { margin-top:3px; color:#687471; }
+.creator-rail-copy p { margin:10px 0 0; color:#087f70; font-size:.76rem; font-weight:800; }
+.discovery-footer { display:flex; justify-content:space-between; gap:16px; margin-top:18px; color:#687471; font-size:.82rem; }
+.discovery-footer span, .discovery-footer a { display:inline-flex; align-items:center; gap:6px; }
+.discovery-footer a { color:#087f70; font-weight:900; }
+@media(max-width:900px){.creator-rail{grid-template-columns:repeat(3,minmax(0,1fr))}.creator-rail-card:nth-child(n+4){display:none}}
+@media(max-width:600px){.discovery-topline{align-items:flex-start;flex-direction:column}.discovery-topline .solid-button{width:100%;justify-content:center}.creator-rail{grid-template-columns:repeat(2,minmax(0,1fr))}.creator-rail-card:nth-child(n+3){display:none}.discovery-footer{align-items:flex-start;flex-direction:column}}
+
 .solid-button,
 .ghost-button,
 .icon-button {

@@ -757,6 +757,22 @@ function Home({
         <div><strong>K-Pay</strong><span>국내 결제 연동 준비</span></div>
         <div><strong>∞</strong><span>팬과 크리에이터의 이야기</span></div>
       </section>
+      <section className="discovery-deck content-band">
+        <div className="discovery-topline">
+          <div><span className="kicker">EON DISCOVER</span><h2>오늘의 인플루언서를 찾아보세요</h2><p>관심 있는 분야와 팬 참여 데이터를 바탕으로 새로운 프로필을 발견합니다.</p></div>
+          <a className="solid-button" href="#categories"><Search size={16} /> 전체 탐색</a>
+        </div>
+        <div className="discovery-tabs" role="navigation" aria-label="인플루언서 탐색">
+          <a className="active" href="#home">추천</a><a href="#categories">카테고리</a><a href="#categories?sort=popular">인기순</a><a href="#categories?sort=new">신규 등록</a><a href="#fan-dashboard">팔로잉</a>
+        </div>
+        <div className="creator-rail">
+          {creators.slice(0, 20).map((creator, index) => <a className="creator-rail-card" href={`#creator/${creator.slug}`} key={creator.id}>
+            <div className="creator-rail-image"><CreatorSheetImage creator={creator} className="creator-rail-sheet" /><span>{index < 3 ? 'TRENDING' : creator.platform}</span></div>
+            <div className="creator-rail-copy"><strong>{creator.displayName}</strong><small>{creator.handle}</small><p>{creator.category?.name || 'Lifestyle'} · 팬 {Math.max(1, creator.wishlist.length * 12)}명+</p></div>
+          </a>)}
+        </div>
+        <div className="discovery-footer"><span><Users size={15} /> 현재 {creators.length}명 공개 · 최대 20명까지 등록 가능</span><a href="#creator-signup">내 프로필 등록 <ArrowRight size={15} /></a></div>
+      </section>
       <section className="content-band mission-band">
         <div className="mission-copy"><span className="kicker">Send a little love</span><h2>주소 없이<br /><em>마음을 전하는 법</em></h2><p>좋아하는 사람에게 선물과 응원 메시지를 보내고, 개인정보는 안전하게 지키세요.</p><a className="solid-button large" href="#fan-signup">팬으로 시작하기 <ArrowRight size={18} /></a></div>
         <div className="mission-cards"><article><ShieldCheck size={25} /><h3>개인정보 보호</h3><p>팬과 크리에이터의 주소와 본명을 직접 공유하지 않는 배송 구조를 준비합니다.</p></article><article><Bell size={25} /><h3>인스타그램 알림</h3><p>선물과 응원 소식이 크리에이터의 연결된 채널에 도착하도록 연동합니다.</p></article><article><HeartHandshake size={25} /><h3>감사와 인증</h3><p>감사 메시지와 스토리 인증으로 선물이 따뜻한 관계로 이어집니다.</p></article></div>
