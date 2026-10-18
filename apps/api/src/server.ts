@@ -891,6 +891,8 @@ const DLocalCheckoutSchema = z.object({
   purchaserName: z.string().min(2).max(120),
   purchaserEmail: z.string().email().max(254),
   purchaserPhone: z.string().max(40).optional(),
+  document: z.string().regex(/^\d{11}$/),
+  paymentMethod: z.enum(['pix', 'card']).default('pix'),
   description: z.string().max(200).optional().default('H&G Agency service')
 });
 
@@ -918,7 +920,9 @@ app.post('/api/payments/dlocal/checkout', async (req, res) => {
   const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
   const payload = {
     amount, currency: 'BRL', country: 'BR', order_id: order.orderNo,
-    payer: { name: parsed.data.purchaserName, email: parsed.data.purchaserEmail, phone: parsed.data.purchaserPhone },
+    payment_method_id: parsed.data.paymentMethod === 'card' ? 'CARD' : 'PQ',
+    payment_method_flow: 'REDIRECT',
+    payer: { name: parsed.data.purchaserName, email: parsed.data.purchaserEmail, phone: parsed.data.purchaserPhone, document: parsed.data.document },
     description: parsed.data.description,
     notification_url: publicAppUrl ? `${publicAppUrl}/api/integrations/dlocal/webhook` : undefined
   };
