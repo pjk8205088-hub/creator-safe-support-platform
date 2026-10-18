@@ -24,6 +24,9 @@ type User = {
   createdAt: string;
 };
 
+type OAuthProvider = 'kakao' | 'naver';
+const oauthStates = new Map<string, { provider: OAuthProvider; role: 'FAN' | 'CREATOR'; expiresAt: number }>();
+
 type Category = {
   id: string;
   name: string;
@@ -577,6 +580,63 @@ const SignupSchema = AuthSchema.extend({
   }
 });
 
+function webOrigin() {
+  return (process.env.PUBLIC_APP_URL || process.env.WEB_ORIGIN?.split(',')[0] || 'http://localhost:3001').replace(/\/$/, '');
+}
+
+function oauthConfig(provider: OAuthProvider) {
+  if (provider === 'kakao') return {
+    clientId: process.env.KAKAO_CLIENT_ID,
+    clientSecret: process.env.KAKAO_CLIENT_SECRET,
+    authorize: 'https://kauth.kakao.com/oauth/authorize',
+    token: 'https://kauth.kakao.com/oauth/token',
+    redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/kakao/callback`
+  };
+  return {
+    clientId: process.env.NAVER_CLIENT_ID,
+    clientSecret: process.env.NAVER_CLIENT_SECRET,
+    authorize: 'https://nid.naver.com/oauth2.0/authorize',
+    token: 'https://nid.naver.com/oauth2.0/token',
+    redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/naver/callback`
+  };
+}
+
+function oauthError(res: express.Response, message: string) {
+  return res.redirect(`${webOrigin()}/#login?oauth_error=${encodeURIComponent(message)}`);
+}
+
+async function exchangeOAuth(provider: OAuthProvider, code: string, state?: string) {
+  const config = oauthConfig(provider);
+  if (!config.clientId || !config.clientSecret) throw new Error(`${provider.toUpperCase()}_OAUTH_NOT_CONFIGURED`);
+  const body = new URLSearchParams({ grant_type: 'authorization_code', client_id: config.clientId, client_secret: config.clientSecret, redirect_uri: config.redirect, code });
+  if (provider === 'naver' && state) body.set('state', state);
+  const tokenResponse = await fetch(config.token, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  if (!tokenResponse.ok) throw new Error('OAUTH_TOKEN_EXCHANGE_FAILED');
+  const token = await tokenResponse.json() as { access_token?: string };
+  if (!token.access_token) throw new Error('OAUTH_TOKEN_MISSING');
+  const profileResponse = await fetch(provider === 'kakao' ? 'https://kapi.kakao.com/v2/user/me' : 'https://openapi.naver.com/v1/nid/me', { headers: { Authorization: `Bearer ${token.access_token}` } });
+  if (!profileResponse.ok) throw new Error('OAUTH_PROFILE_FAILED');
+  const profile = await profileResponse.json() as any;
+  if (provider === 'kakao') return { subject: String(profile.id), email: profile.kakao_account?.email, name: profile.kakao_account?.profile?.nickname || '카카오 사용자' };
+  return { subject: String(profile.response?.id), email: profile.response?.email, name: profile.response?.name || profile.response?.nickname || '네이버 사용자' };
+}
+
+async function upsertOAuthUser(provider: OAuthProvider, profile: { subject: string; email?: string; name: string }, role: 'FAN' | 'CREATOR') {
+  if (!prisma) throw new Error('DATABASE_NOT_CONFIGURED');
+  await seedDatabase();
+  const identityKey = `oauth:${provider}:${profile.subject}`;
+  const existingIdentity = await prisma.adminSetting.findUnique({ where: { key: identityKey } });
+  let user = existingIdentity ? await prisma.user.findUnique({ where: { id: existingIdentity.value } }) : null;
+  if (!user && profile.email) user = await prisma.user.findUnique({ where: { email: profile.email.toLowerCase() } });
+  if (!user) {
+    const id = `usr_${nanoid(12)}`;
+    user = await prisma.user.create({ data: { id, email: (profile.email || `${provider}_${profile.subject}@oauth.local`).toLowerCase(), displayName: profile.name.slice(0, 30), passwordHash: await bcrypt.hash(nanoid(32), 12), role } });
+    await prisma.pointWallet.create({ data: { userId: user.id, balance: 0 } });
+  }
+  await prisma.adminSetting.upsert({ where: { key: identityKey }, update: { value: user.id }, create: { key: identityKey, value: user.id } });
+  return issueSession({ id: user.id, name: user.displayName, email: user.email, password: '', role: user.role as UserRole, createdAt: user.createdAt.toISOString() });
+}
+
 function publicUser(user: User) {
   const { password, ...safe } = user;
   return safe;
@@ -1025,6 +1085,36 @@ app.get('/api/creators/:slug', async (req, res) => {
   const creator = creators.find(item => item.slug === req.params.slug || item.id === req.params.slug);
   if (!creator) return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
   res.json({ ...creatorSummary(creator), addressMasked: maskAddress(creator.safeAddress) });
+});
+
+app.get('/api/auth/oauth/:provider/start', (req, res) => {
+  const provider = req.params.provider as OAuthProvider;
+  if (provider !== 'kakao' && provider !== 'naver') return res.status(404).json({ code: 'OAUTH_PROVIDER_NOT_SUPPORTED' });
+  const config = oauthConfig(provider);
+  if (!config.clientId) return res.status(503).json({ code: `${provider.toUpperCase()}_OAUTH_NOT_CONFIGURED` });
+  const role = req.query.role === 'CREATOR' ? 'CREATOR' : 'FAN';
+  const state = nanoid(24);
+  oauthStates.set(state, { provider, role, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const params = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirect, response_type: 'code', state });
+  return res.redirect(`${config.authorize}?${params.toString()}`);
+});
+
+app.get('/api/auth/oauth/:provider/callback', async (req, res) => {
+  const provider = req.params.provider as OAuthProvider;
+  if (provider !== 'kakao' && provider !== 'naver') return oauthError(res, '지원하지 않는 로그인입니다.');
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const saved = oauthStates.get(state);
+  oauthStates.delete(state);
+  if (!code || !saved || saved.provider !== provider || saved.expiresAt < Date.now()) return oauthError(res, '로그인 인증이 만료되었습니다. 다시 시도해 주세요.');
+  try {
+    const profile = await exchangeOAuth(provider, code, state);
+    const session = await upsertOAuthUser(provider, profile, saved.role);
+    return res.redirect(`${webOrigin()}/#oauth-callback?token=${encodeURIComponent(session.token)}`);
+  } catch (error) {
+    console.error('OAuth callback failed', error);
+    return oauthError(res, '간편 로그인에 실패했습니다. 관리자 설정과 Redirect URI를 확인해 주세요.');
+  }
 });
 
 app.post('/api/auth/signup', async (req, res) => {

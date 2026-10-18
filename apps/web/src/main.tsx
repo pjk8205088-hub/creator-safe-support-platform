@@ -531,6 +531,22 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const hash = location.hash.replace(/^#/, '');
+    if (!hash.startsWith('oauth-callback?') || !API) return;
+    const token = new URLSearchParams(hash.split('?')[1]).get('token');
+    if (!token) return;
+    fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('OAuth session failed');
+        const data = await response.json() as { user: Session['user'] };
+        const nextSession = { token, user: data.user };
+        setSession(nextSession);
+        location.hash = data.user.role === 'CREATOR' ? 'creator-dashboard' : data.user.role === 'ADMIN' ? 'admin' : 'fan-dashboard';
+      })
+      .catch(() => { location.hash = 'login'; });
+  }, []);
+
+  useEffect(() => {
     load();
   }, []);
 
@@ -1566,8 +1582,14 @@ function AuthPage({
     setError('가입에 실패했습니다. 이메일 중복 여부와 서버 연결을 확인해 주세요.');
   }
 
-  async function socialDemo(provider: string) {
-    setError(`${provider} 로그인은 아직 연결되지 않았습니다. 이메일 로그인을 이용해 주세요.`);
+  function socialDemo(provider: string) {
+    const normalized = provider.toLowerCase();
+    if (!API || !['kakao', 'naver'].includes(normalized)) {
+      setError(`${provider} 간편 로그인은 현재 카카오와 네이버만 지원합니다.`);
+      return;
+    }
+    const targetRole = mode === 'signup' ? role : loginAs === 'CREATOR' ? 'CREATOR' : 'FAN';
+    location.href = `${API}/api/auth/oauth/${normalized}/start?role=${targetRole}`;
   }
 
   if (session && mode === 'login' && !isAdminLogin) {
@@ -1598,7 +1620,7 @@ function AuthPage({
         ) : null}
         {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><button type="button" className={loginAs === 'CREATOR' ? 'active' : ''} onClick={() => setLoginAs('CREATOR')}>인플루언서 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
         <div className="social-row">
-          {['Kakao', 'Naver', 'Instagram'].map(provider => (
+          {['Kakao', 'Naver'].map(provider => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
               {provider}
             </button>
