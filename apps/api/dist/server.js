@@ -12,6 +12,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { CreateSupportSchema, maskAddress } from '@cssp/shared';
+import { dLocalConfig, dLocalRequest } from './dlocal.js';
 const oauthStates = new Map();
 const app = express();
 app.use(helmet());
@@ -516,12 +517,20 @@ function oauthConfig(provider) {
             token: 'https://kauth.kakao.com/oauth/token',
             redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/kakao/callback`
         };
+    if (provider === 'naver')
+        return {
+            clientId: process.env.NAVER_CLIENT_ID,
+            clientSecret: process.env.NAVER_CLIENT_SECRET,
+            authorize: 'https://nid.naver.com/oauth2.0/authorize',
+            token: 'https://nid.naver.com/oauth2.0/token',
+            redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/naver/callback`
+        };
     return {
-        clientId: process.env.NAVER_CLIENT_ID,
-        clientSecret: process.env.NAVER_CLIENT_SECRET,
-        authorize: 'https://nid.naver.com/oauth2.0/authorize',
-        token: 'https://nid.naver.com/oauth2.0/token',
-        redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/naver/callback`
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token: 'https://oauth2.googleapis.com/token',
+        redirect: `${process.env.PUBLIC_APP_URL || 'https://eon8.co.kr'}/api/auth/oauth/google/callback`
     };
 }
 function oauthError(res, message) {
@@ -540,13 +549,16 @@ async function exchangeOAuth(provider, code, state) {
     const token = await tokenResponse.json();
     if (!token.access_token)
         throw new Error('OAUTH_TOKEN_MISSING');
-    const profileResponse = await fetch(provider === 'kakao' ? 'https://kapi.kakao.com/v2/user/me' : 'https://openapi.naver.com/v1/nid/me', { headers: { Authorization: `Bearer ${token.access_token}` } });
+    const profileUrl = provider === 'kakao' ? 'https://kapi.kakao.com/v2/user/me' : provider === 'naver' ? 'https://openapi.naver.com/v1/nid/me' : 'https://openidconnect.googleapis.com/v1/userinfo';
+    const profileResponse = await fetch(profileUrl, { headers: { Authorization: `Bearer ${token.access_token}` } });
     if (!profileResponse.ok)
         throw new Error('OAUTH_PROFILE_FAILED');
     const profile = await profileResponse.json();
     if (provider === 'kakao')
         return { subject: String(profile.id), email: profile.kakao_account?.email, name: profile.kakao_account?.profile?.nickname || '카카오 사용자' };
-    return { subject: String(profile.response?.id), email: profile.response?.email, name: profile.response?.name || profile.response?.nickname || '네이버 사용자' };
+    if (provider === 'naver')
+        return { subject: String(profile.response?.id), email: profile.response?.email, name: profile.response?.name || profile.response?.nickname || '네이버 사용자' };
+    return { subject: String(profile.sub), email: profile.email, name: profile.name || 'Google 사용자' };
 }
 async function upsertOAuthUser(provider, profile, role) {
     if (!prisma)
@@ -791,12 +803,119 @@ function littlyPaymentStatus() {
         message: automaticConfirmationReady ? '결제 완료 자동 확인이 연결되어 있습니다.' : '결제 자동 확인용 웹훅 또는 이메일 전달 시크릿을 설정해 주세요.',
         checkoutVerified: automaticConfirmationReady, refundVerified: false, payoutEnabled: false };
 }
+function eximbayPaymentStatus() {
+    const mode = process.env.EXIMBAY_MODE === 'live' ? 'live' : 'test';
+    const apiBase = process.env.EXIMBAY_API_BASE_URL || (mode === 'live' ? 'https://api.eximbay.com' : 'https://api-test.eximbay.com');
+    const checkoutUrl = process.env.EXIMBAY_CHECKOUT_URL || '';
+    const credentialsConfigured = Boolean(process.env.EXIMBAY_MID && process.env.EXIMBAY_SECRET_KEY);
+    const ready = Boolean(checkoutUrl && credentialsConfigured && dbReady());
+    const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+    return {
+        provider: 'Eximbay', mode, apiBase, ready, credentialsConfigured,
+        checkoutUrl: checkoutUrl || null,
+        callbackUrl: publicAppUrl ? `${publicAppUrl}/api/integrations/eximbay/status` : null,
+        webhookUrl: publicAppUrl ? `${publicAppUrl}/api/integrations/eximbay/status` : null,
+        message: ready ? `Eximbay ${mode === 'live' ? '운영' : '테스트'} 결제창을 사용할 수 있습니다.` : 'Eximbay MID, Secret Key, 결제창 URL 및 DB 설정이 필요합니다.',
+        checkoutVerified: ready, refundVerified: false, payoutEnabled: false
+    };
+}
 app.get('/api/payments/config', (_req, res) => {
-    const status = littlyPaymentStatus();
-    res.json(status);
+    const littly = littlyPaymentStatus();
+    const eximbay = eximbayPaymentStatus();
+    res.json({ ...littly, providers: { LITTLY: littly, EXIMBAY: eximbay }, defaultProvider: littly.ready ? 'LITTLY' : eximbay.ready ? 'EXIMBAY' : 'LITTLY' });
 });
 app.get('/api/admin/pg-status', (_req, res) => {
-    res.json(littlyPaymentStatus());
+    const littly = littlyPaymentStatus();
+    const eximbay = eximbayPaymentStatus();
+    res.json({ ...littly, providers: { LITTLY: littly, EXIMBAY: eximbay } });
+});
+app.get('/api/payments/dlocal-config', (_req, res) => {
+    const config = dLocalConfig();
+    res.json({ provider: 'DLOCAL', mode: config.mode, ready: config.ready, credentialsConfigured: config.ready,
+        message: config.ready ? 'dLocal API is configured.' : 'dLocal Sandbox credentials are not configured yet.' });
+});
+const DLocalCheckoutSchema = z.object({
+    creatorId: z.string().min(1).max(100),
+    amount: z.number().positive().max(1000000),
+    currency: z.string().length(3).default('BRL'),
+    country: z.string().length(2).default('BR'),
+    purchaserName: z.string().min(2).max(120),
+    purchaserEmail: z.string().email().max(254),
+    purchaserPhone: z.string().max(40).optional(),
+    description: z.string().max(200).optional().default('H&G Agency service')
+});
+// dLocal checkout: creates a pending local order, then asks dLocal for PIX/card
+// payment instructions. This route is intentionally unavailable until sandbox
+// credentials are configured, so no real payment can be created accidentally.
+app.post('/api/payments/dlocal/checkout', async (req, res) => {
+    const config = dLocalConfig();
+    if (!config.ready)
+        return res.status(503).json({ code: 'DLOCAL_NOT_CONFIGURED', message: 'dLocal Sandbox credentials are not configured yet.' });
+    const parsed = DLocalCheckoutSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'VALIDATION_ERROR', issues: parsed.error.issues });
+    if (parsed.data.currency !== 'BRL' || parsed.data.country !== 'BR')
+        return res.status(400).json({ code: 'BRAZIL_ONLY_CHECKOUT' });
+    if (!dbReady())
+        return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+    await seedDatabase();
+    const creator = await prisma.creatorProfile.findFirst({ where: { OR: [{ id: parsed.data.creatorId }, { slug: parsed.data.creatorId }] } });
+    if (!creator)
+        return res.status(404).json({ code: 'CREATOR_NOT_FOUND' });
+    const amount = Math.round(parsed.data.amount * 100) / 100;
+    const order = await prisma.digitalOrder.create({ data: {
+            orderNo: `dlocal_${nanoid(14)}`, creatorId: creator.id,
+            purchaserName: parsed.data.purchaserName, purchaserEmail: parsed.data.purchaserEmail,
+            message: parsed.data.description, pointAmount: Math.round(amount * 100),
+            paymentProvider: 'DLOCAL', paymentKey: null, commissionRate: 0, adminFee: 0, creatorPayout: 0
+        } });
+    const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const payload = {
+        amount, currency: 'BRL', country: 'BR', order_id: order.orderNo,
+        payer: { name: parsed.data.purchaserName, email: parsed.data.purchaserEmail, phone: parsed.data.purchaserPhone },
+        description: parsed.data.description,
+        notification_url: publicAppUrl ? `${publicAppUrl}/api/integrations/dlocal/webhook` : undefined
+    };
+    try {
+        const payment = await dLocalRequest('/payments', payload, config);
+        const paymentId = typeof payment?.id === 'string' ? payment.id : undefined;
+        if (paymentId)
+            await prisma.digitalOrder.update({ where: { id: order.id }, data: { paymentKey: paymentId } });
+        return res.status(201).json({ orderId: order.orderNo, status: 'PENDING_PAYMENT', payment });
+    }
+    catch (error) {
+        await prisma.digitalOrder.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+        const message = error instanceof Error ? error.message : 'DLOCAL_REQUEST_FAILED';
+        return res.status(502).json({ code: 'DLOCAL_REQUEST_FAILED', message });
+    }
+});
+const DLocalWebhookSchema = z.object({
+    id: z.string().max(200).optional(), order_id: z.string().min(6).max(100),
+    status: z.string().max(60), amount: z.number().optional(), currency: z.string().optional()
+});
+app.post('/api/integrations/dlocal/webhook', async (req, res) => {
+    const secret = process.env.DLOCAL_WEBHOOK_SECRET;
+    if (secret && req.header('x-dlocal-webhook-secret') !== secret)
+        return res.status(401).json({ code: 'INVALID_WEBHOOK_SECRET' });
+    const parsed = DLocalWebhookSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'INVALID_DLOCAL_WEBHOOK' });
+    if (!dbReady())
+        return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+    const paid = ['PAID', 'APPROVED', 'COMPLETED', 'AUTHORIZED'].includes(parsed.data.status.toUpperCase());
+    const failed = ['REJECTED', 'CANCELLED', 'EXPIRED', 'FAILED'].includes(parsed.data.status.toUpperCase());
+    if (!paid && !failed)
+        return res.status(202).json({ orderId: parsed.data.order_id, status: 'IGNORED' });
+    const order = await prisma.digitalOrder.findUnique({ where: { orderNo: parsed.data.order_id } });
+    if (!order)
+        return res.status(404).json({ code: 'ORDER_NOT_FOUND' });
+    if (parsed.data.amount !== undefined && Math.abs(parsed.data.amount * 100 - order.pointAmount) > 1)
+        return res.status(409).json({ code: 'AMOUNT_MISMATCH' });
+    await prisma.digitalOrder.update({ where: { id: order.id }, data: {
+            status: paid ? 'PAID' : 'CANCELLED', paidAt: paid ? (order.paidAt || new Date()) : null,
+            paymentKey: parsed.data.id || order.paymentKey
+        } });
+    return res.json({ orderId: order.orderNo, status: paid ? 'PAID' : 'CANCELLED' });
 });
 function creatorSummary(creator) {
     const { safeAddress, ...safe } = creator;
@@ -1083,7 +1202,7 @@ app.get('/api/creators/:slug', async (req, res) => {
 });
 app.get('/api/auth/oauth/:provider/start', (req, res) => {
     const provider = req.params.provider;
-    if (provider !== 'kakao' && provider !== 'naver')
+    if (!['kakao', 'naver', 'google'].includes(provider))
         return res.status(404).json({ code: 'OAUTH_PROVIDER_NOT_SUPPORTED' });
     const config = oauthConfig(provider);
     if (!config.clientId)
@@ -1096,7 +1215,7 @@ app.get('/api/auth/oauth/:provider/start', (req, res) => {
 });
 app.get('/api/auth/oauth/:provider/callback', async (req, res) => {
     const provider = req.params.provider;
-    if (provider !== 'kakao' && provider !== 'naver')
+    if (!['kakao', 'naver', 'google'].includes(provider))
         return oauthError(res, '지원하지 않는 로그인입니다.');
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     const state = typeof req.query.state === 'string' ? req.query.state : '';
@@ -1501,6 +1620,41 @@ app.post('/api/payments/littly-checkout', async (req, res) => {
     };
     paymentOrders.unshift(order);
     res.json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: checkoutBase });
+});
+// Eximbay checkout uses a merchant-hosted payment window URL. The URL and
+// credentials stay server-side so a missing merchant setup cannot create a
+// misleading or unpaid order.
+app.post('/api/payments/eximbay-checkout', async (req, res) => {
+    const user = await getUserFromRequest(req);
+    if (!user || user.role !== 'FAN')
+        return res.status(403).json({ code: 'FAN_ONLY' });
+    const config = eximbayPaymentStatus();
+    if (!config.ready)
+        return res.status(503).json({ code: 'EXIMBAY_NOT_CONFIGURED', message: config.message });
+    const parsed = z.object({ creatorId: z.string(), productId: z.string(), supporterName: z.string().max(100), message: z.string().max(500).optional().default(''), amount: z.number().positive().optional() }).safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ code: 'VALIDATION_ERROR' });
+    if (!dbReady())
+        return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+    await seedDatabase();
+    const product = await prisma.digitalProduct.findFirst({ where: { id: parsed.data.productId, isActive: true, creator: { isActive: true } }, include: { creator: true } });
+    if (!product)
+        return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+    if (![product.creatorId, product.creator.slug].includes(parsed.data.creatorId))
+        return res.status(409).json({ code: 'PRODUCT_CREATOR_MISMATCH' });
+    const amount = product.pointPrice;
+    const commissionRate = await getCommissionRate();
+    const adminFee = Math.round((amount * commissionRate) / 100);
+    const creatorPayout = amount - adminFee;
+    const orderId = `ord_${nanoid(12)}`;
+    const paymentKey = `eximbay_${nanoid(8)}`;
+    await prisma.digitalOrder.create({ data: { orderNo: orderId, fanId: user.id, creatorId: product.creatorId, productId: product.id, purchaserName: parsed.data.supporterName, purchaserEmail: user.email, message: parsed.data.message, pointAmount: amount, paymentProvider: 'EXIMBAY', paymentKey, status: 'PENDING_PAYMENT', commissionRate, adminFee, creatorPayout, payoutStatus: 'PENDING' } });
+    const checkoutUrl = new URL(config.checkoutUrl);
+    checkoutUrl.searchParams.set('orderId', orderId);
+    checkoutUrl.searchParams.set('amount', String(amount));
+    checkoutUrl.searchParams.set('product', product.title);
+    checkoutUrl.searchParams.set('mid', process.env.EXIMBAY_MID);
+    return res.status(201).json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, eximbayUrl: checkoutUrl.toString() });
 });
 app.post('/api/admin/littly-confirm/:orderId', async (req, res) => {
     const viewer = await getUserFromRequest(req);

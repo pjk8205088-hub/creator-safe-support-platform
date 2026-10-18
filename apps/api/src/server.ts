@@ -848,13 +848,33 @@ function littlyPaymentStatus() {
     checkoutVerified: automaticConfirmationReady, refundVerified: false, payoutEnabled: false };
 }
 
+function eximbayPaymentStatus() {
+  const mode = process.env.EXIMBAY_MODE === 'live' ? 'live' : 'test';
+  const apiBase = process.env.EXIMBAY_API_BASE_URL || (mode === 'live' ? 'https://api.eximbay.com' : 'https://api-test.eximbay.com');
+  const checkoutUrl = process.env.EXIMBAY_CHECKOUT_URL || '';
+  const credentialsConfigured = Boolean(process.env.EXIMBAY_MID && process.env.EXIMBAY_SECRET_KEY);
+  const ready = Boolean(checkoutUrl && credentialsConfigured && dbReady());
+  const publicAppUrl = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  return {
+    provider: 'Eximbay', mode, apiBase, ready, credentialsConfigured,
+    checkoutUrl: checkoutUrl || null,
+    callbackUrl: publicAppUrl ? `${publicAppUrl}/api/integrations/eximbay/status` : null,
+    webhookUrl: publicAppUrl ? `${publicAppUrl}/api/integrations/eximbay/status` : null,
+    message: ready ? `Eximbay ${mode === 'live' ? '운영' : '테스트'} 결제창을 사용할 수 있습니다.` : 'Eximbay MID, Secret Key, 결제창 URL 및 DB 설정이 필요합니다.',
+    checkoutVerified: ready, refundVerified: false, payoutEnabled: false
+  };
+}
+
 app.get('/api/payments/config', (_req, res) => {
-  const status = littlyPaymentStatus();
-  res.json(status);
+  const littly = littlyPaymentStatus();
+  const eximbay = eximbayPaymentStatus();
+  res.json({ ...littly, providers: { LITTLY: littly, EXIMBAY: eximbay }, defaultProvider: littly.ready ? 'LITTLY' : eximbay.ready ? 'EXIMBAY' : 'LITTLY' });
 });
 
 app.get('/api/admin/pg-status', (_req, res) => {
-  res.json(littlyPaymentStatus());
+  const littly = littlyPaymentStatus();
+  const eximbay = eximbayPaymentStatus();
+  res.json({ ...littly, providers: { LITTLY: littly, EXIMBAY: eximbay } });
 });
 
 app.get('/api/payments/dlocal-config', (_req, res) => {
@@ -1582,6 +1602,36 @@ app.post('/api/payments/littly-checkout', async (req, res) => {
   };
   paymentOrders.unshift(order);
   res.json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, littlyUrl: checkoutBase });
+});
+
+// Eximbay checkout uses a merchant-hosted payment window URL. The URL and
+// credentials stay server-side so a missing merchant setup cannot create a
+// misleading or unpaid order.
+app.post('/api/payments/eximbay-checkout', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  if (!user || user.role !== 'FAN') return res.status(403).json({ code: 'FAN_ONLY' });
+  const config = eximbayPaymentStatus();
+  if (!config.ready) return res.status(503).json({ code: 'EXIMBAY_NOT_CONFIGURED', message: config.message });
+  const parsed = z.object({ creatorId: z.string(), productId: z.string(), supporterName: z.string().max(100), message: z.string().max(500).optional().default(''), amount: z.number().positive().optional() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ code: 'VALIDATION_ERROR' });
+  if (!dbReady()) return res.status(503).json({ code: 'DATABASE_NOT_CONFIGURED' });
+  await seedDatabase();
+  const product = await prisma!.digitalProduct.findFirst({ where: { id: parsed.data.productId, isActive: true, creator: { isActive: true } }, include: { creator: true } });
+  if (!product) return res.status(404).json({ code: 'PRODUCT_NOT_FOUND' });
+  if (![product.creatorId, product.creator.slug].includes(parsed.data.creatorId)) return res.status(409).json({ code: 'PRODUCT_CREATOR_MISMATCH' });
+  const amount = product.pointPrice;
+  const commissionRate = await getCommissionRate();
+  const adminFee = Math.round((amount * commissionRate) / 100);
+  const creatorPayout = amount - adminFee;
+  const orderId = `ord_${nanoid(12)}`;
+  const paymentKey = `eximbay_${nanoid(8)}`;
+  await prisma!.digitalOrder.create({ data: { orderNo: orderId, fanId: user.id, creatorId: product.creatorId, productId: product.id, purchaserName: parsed.data.supporterName, purchaserEmail: user.email, message: parsed.data.message, pointAmount: amount, paymentProvider: 'EXIMBAY', paymentKey, status: 'PENDING_PAYMENT', commissionRate, adminFee, creatorPayout, payoutStatus: 'PENDING' } });
+  const checkoutUrl = new URL(config.checkoutUrl!);
+  checkoutUrl.searchParams.set('orderId', orderId);
+  checkoutUrl.searchParams.set('amount', String(amount));
+  checkoutUrl.searchParams.set('product', product.title);
+  checkoutUrl.searchParams.set('mid', process.env.EXIMBAY_MID!);
+  return res.status(201).json({ orderId, status: 'PENDING_PAYMENT', amount, adminFee, creatorPayout, eximbayUrl: checkoutUrl.toString() });
 });
 
 app.post('/api/admin/littly-confirm/:orderId', async (req, res) => {

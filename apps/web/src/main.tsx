@@ -1278,10 +1278,10 @@ function CheckoutPage({
   onCancel: () => void;
   onComplete: (order: PaymentOrderResponse, support?: Support) => Promise<void> | void;
 }) {
-  const provider = 'LITTLY';
+  const [provider, setProvider] = useState<'LITTLY' | 'EXIMBAY'>('LITTLY');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; message: string } | null>(null);
+  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; message: string; providers?: Record<string, { ready: boolean; mode: string; message: string }> } | null>(null);
 
   useEffect(() => {
     fetch(`${API}/api/payments/config`).then(response => response.ok ? response.json() : null).then(data => setPgStatus(data)).catch(() => setPgStatus(null));
@@ -1306,18 +1306,18 @@ function CheckoutPage({
       if (API) {
         const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
         if (!stored?.token) throw new Error('로그인 후 결제해 주세요.');
-        const response = await fetch(`${API}/api/payments/littly-checkout`, {
+        const response = await fetch(`${API}/api/payments/${provider === 'EXIMBAY' ? 'eximbay' : 'littly'}-checkout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stored.token}` },
           body: JSON.stringify(payload)
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.code === 'PG_NOT_READY' ? 'Littly 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
+          throw new Error(failure.code === 'EXIMBAY_NOT_CONFIGURED' ? 'Eximbay 가맹점 설정이 아직 완료되지 않았습니다.' : failure.code === 'PG_NOT_READY' ? 'Littly 가맹점 연결 준비 중입니다. 결제되지 않았습니다.' : failure.code === 'PRODUCT_NOT_APPROVED' || failure.code === 'PRODUCT_UNAVAILABLE' ? '관리자 검토가 완료된 결제 상품이 아닙니다.' : failure.code === 'FAN_ONLY' ? '팬 계정으로 로그인해 결제해 주세요.' : `주문 생성 실패 (${response.status})`);
         }
-        const littlyOrder = await response.json();
-        localStorage.setItem('cssp-littly-pending-order', JSON.stringify({ ...payload, orderId: littlyOrder.orderId, createdAt: new Date().toISOString() }));
-        window.location.assign(littlyOrder.littlyUrl || LITTLY_CHECKOUT_URL);
+        const order = await response.json();
+        localStorage.setItem(`cssp-${provider.toLowerCase()}-pending-order`, JSON.stringify({ ...payload, provider, orderId: order.orderId, createdAt: new Date().toISOString() }));
+        window.location.assign(provider === 'EXIMBAY' ? order.eximbayUrl : order.littlyUrl || LITTLY_CHECKOUT_URL);
         return;
       }
 
@@ -1335,8 +1335,8 @@ function CheckoutPage({
         <div>
           <span className="kicker">Checkout</span>
           <h1>{draft.creatorName} 결제창</h1>
-          <p>Littly 카드 결제 승인 후 주문 상태가 확인됩니다.</p>
-          <span className={`fan-pg-inline ${pgStatus?.ready ? 'ready' : ''}`}>Littly · {pgStatus?.mode || '상태 확인 중'} · {pgStatus?.message || 'PG 연결 상태를 확인할 수 없습니다.'}</span>
+          <p>선택한 PG 결제 승인 후 주문 상태와 수수료가 기록됩니다.</p>
+          <span className={`fan-pg-inline ${pgStatus?.providers?.[provider]?.ready ? 'ready' : ''}`}>{provider === 'EXIMBAY' ? 'Eximbay' : 'Littly'} · {pgStatus?.providers?.[provider]?.mode || pgStatus?.mode || '상태 확인 중'} · {pgStatus?.providers?.[provider]?.message || pgStatus?.message || 'PG 연결 상태를 확인할 수 없습니다.'}</span>
         </div>
       </div>
       <div className="checkout-layout">
@@ -1369,8 +1369,9 @@ function CheckoutPage({
         <aside className="checkout-panel">
           <label>
             결제수단
-            <select value={provider} disabled>
+            <select value={provider} onChange={event => setProvider(event.target.value as 'LITTLY' | 'EXIMBAY')}>
             <option value="LITTLY">Littly 카드</option>
+            <option value="EXIMBAY" disabled={!pgStatus?.providers?.EXIMBAY?.ready}>Eximbay 국내·해외 카드{pgStatus?.providers?.EXIMBAY?.ready ? '' : ' (설정 필요)'}</option>
             </select>
           </label>
           <label>
@@ -1383,7 +1384,7 @@ function CheckoutPage({
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="solid-button large" type="button" onClick={pay} disabled={busy}>
-            {busy ? '결제창 연결 중...' : pgStatus?.ready ? `${draft.amount.toLocaleString()}원 Littly 결제` : 'Littly 연결 후 결제 가능'}
+            {busy ? '결제창 연결 중...' : pgStatus?.providers?.[provider]?.ready || (provider === 'LITTLY' && pgStatus?.ready) ? `${draft.amount.toLocaleString()}원 ${provider === 'EXIMBAY' ? 'Eximbay' : 'Littly'} 결제` : `${provider === 'EXIMBAY' ? 'Eximbay' : 'Littly'} 연결 후 결제 가능`}
           </button>
           {!pgStatus?.ready && <p className="form-hint">PG 가맹점 설정이 완료되지 않아 결제를 시작할 수 없습니다.</p>}
           <button className="ghost-button large" type="button" onClick={onCancel}>
@@ -1489,6 +1490,13 @@ function AuthPage({
   const [busy, setBusy] = useState(false);
   const isAdminLogin = mode === 'login' && location.hash.replace('#', '') === 'admin-login';
 
+  useEffect(() => {
+    if (!session || mode !== 'login') return;
+    if (isAdminLogin && session.user.role !== 'ADMIN') return;
+    const destination = session.user.role === 'ADMIN' ? 'admin' : session.user.role === 'CREATOR' ? 'creator-dashboard' : 'fan-dashboard';
+    if (location.hash.replace('#', '') !== destination) location.hash = destination;
+  }, [isAdminLogin, mode, session]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -1584,8 +1592,8 @@ function AuthPage({
 
   function socialDemo(provider: string) {
     const normalized = provider.toLowerCase();
-    if (!API || !['kakao', 'naver'].includes(normalized)) {
-      setError(`${provider} 간편 로그인은 현재 카카오와 네이버만 지원합니다.`);
+    if (!API || !['kakao', 'naver', 'google'].includes(normalized)) {
+      setError(`${provider} 간편 로그인을 사용할 수 없습니다.`);
       return;
     }
     const targetRole = mode === 'signup' ? role : loginAs === 'CREATOR' ? 'CREATOR' : 'FAN';
@@ -1620,8 +1628,13 @@ function AuthPage({
         ) : null}
         {mode === 'login' && !isAdminLogin && <div className="segment login-role-switch"><button type="button" className={loginAs === 'FAN' ? 'active' : ''} onClick={() => setLoginAs('FAN')}>팬 로그인</button><button type="button" className={loginAs === 'CREATOR' ? 'active' : ''} onClick={() => setLoginAs('CREATOR')}>인플루언서 로그인</button><a className="ghost-button" href="#admin-login">관리자 로그인</a></div>}
         <div className="social-row">
-          {['Kakao', 'Naver'].map(provider => (
+          {[
+            ['Kakao', 'https://cdn.simpleicons.org/kakao/111820'],
+            ['Naver', 'https://cdn.simpleicons.org/naver/03C75A'],
+            ['Google', 'https://cdn.simpleicons.org/google']
+          ].map(([provider, logo]) => (
             <button className="ghost-button social-button" type="button" onClick={() => socialDemo(provider)} key={provider}>
+              <img className="social-logo" src={logo} alt="" aria-hidden="true" />
               {provider}
             </button>
           ))}
