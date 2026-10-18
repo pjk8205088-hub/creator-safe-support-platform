@@ -43,6 +43,9 @@ export async function dLocalRequest(path: string, body: Record<string, unknown>,
     body: payload,
     signal: AbortSignal.timeout(12000)
   });
-  if (!response.ok) throw new Error(`DLOCAL_HTTP_${response.status}`);
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 800);
+    throw new Error(`DLOCAL_HTTP_${response.status}${detail ? `: ${detail}` : ''}`);
+  }
   return response.json();
 }
