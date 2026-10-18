@@ -1503,6 +1503,10 @@ footer {
   background: transparent;
 }
 
+.admin-refresh { flex:0 0 auto; }
+.spin-icon { animation: admin-spin .8s linear infinite; }
+@keyframes admin-spin { to { transform: rotate(360deg); } }
+
 .admin-info-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -697,6 +697,7 @@ export function App() {
           categories={categories}
           adminFeeTotal={adminFeeTotal}
           creatorPayoutTotal={creatorPayoutTotal}
+          onRefresh={load}
         />
       )}
       {page === 'business' && <BusinessPage />}
@@ -2016,7 +2017,8 @@ function Admin({
   creators,
   categories,
   adminFeeTotal,
-  creatorPayoutTotal
+  creatorPayoutTotal,
+  onRefresh
 }: {
   page: string;
   supports: Support[];
@@ -2024,6 +2026,7 @@ function Admin({
   categories: Category[];
   adminFeeTotal: number;
   creatorPayoutTotal: number;
+  onRefresh: () => Promise<void>;
 }) {
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
@@ -2037,6 +2040,7 @@ function Admin({
   const [members, setMembers] = useState<Array<{ id: string; email: string; displayName: string; role: string; grade: string; walletBalance?: number; bankVerified?: boolean; createdAt: string; application?: { bio: string; photoUrls: string[]; instagramVideoUrl: string; payoutAccount: string; bankName?: string; accountHolder?: string; accountNumber?: string; instagramId?: string; dmAlertThreshold?: number; dmNotice?: string; reviewStatus?: 'PENDING' | 'APPROVED' | 'ON_HOLD'; reviewNote?: string; reviewedAt?: string } }>>([]);
   const [walletTool, setWalletTool] = useState({ userId: '', delta: '10000', reason: '운영 테스트 캐시' });
   const [noticeTool, setNoticeTool] = useState({ creatorId: '', channel: 'KAKAO', body: '테스트 후원 알림입니다.' });
+  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem(sessionKey) || 'null') as Session | null;
     const headers = { Authorization: `Bearer ${stored?.token || ''}` };
@@ -2275,6 +2279,9 @@ function Admin({
             <Search size={16} />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="결제번호, 팬, 인플러언서 검색" />
           </label>
+          <button className="ghost-button admin-refresh" type="button" disabled={refreshing} onClick={async () => { setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } }}>
+            <ArrowRight size={16} className={refreshing ? 'spin-icon' : ''} /> {refreshing ? 'DB 조회 중...' : 'DB 새로고침'}
+          </button>
         </header>
 
         <div className="admin-info-grid">
