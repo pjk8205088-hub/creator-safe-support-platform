@@ -2028,7 +2028,7 @@ function Admin({
   const [query, setQuery] = useState('');
   const [feeRate, setFeeRate] = useState(25);
   const [dataError, setDataError] = useState('');
-  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; credentialsConfigured: boolean; callbackUrl: string | null; webhookUrl: string | null } | null>(null);
+  const [pgStatus, setPgStatus] = useState<{ ready: boolean; mode: string; credentialsConfigured: boolean; callbackUrl: string | null; webhookUrl: string | null; providers?: Record<string, { provider: string; ready: boolean; mode: string; credentialsConfigured: boolean; message: string; checkoutUrl?: string | null }> } | null>(null);
   const [littlyEmails, setLittlyEmails] = useState<Array<{ id: string; subject: string; from: string; text: string; receivedAt: string; status: string }>>([]);
   const [payoutRequests, setPayoutRequests] = useState<Array<{ id: string; creatorId: string; amount: number; status: string; note: string; createdAt: string }>>([]);
   const [payoutAgreements, setPayoutAgreements] = useState<Array<{ creatorId: string; amount: number; note: string; updatedAt: string }>>([]);
@@ -2220,7 +2220,7 @@ function Admin({
           <span>IK</span>
           <div>
             <b>EON Korea</b>
-            <small>AdminLTE 4.8.5-style</small>
+          <small>AdminLTE 운영 콘솔</small>
           </div>
         </div>
         <nav>
@@ -2263,14 +2263,13 @@ function Admin({
       </aside>
 
       <div className="admin-main">
-        <p role="status">Littly 키 발급 대기 · 결제/환불/자동 지급 미연결</p>
-        <a href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">연결된 리틀리 페이지 확인</a>
+        <div className="admin-notice-row" role="status"><span><ShieldCheck size={15} /> 운영 데이터는 관리자 권한으로만 표시됩니다.</span><a href="https://litt.ly/eon8" target="_blank" rel="noopener noreferrer">Littly 결제 페이지 확인 <ArrowRight size={14} /></a></div>
         {dataError && <p role="alert">{dataError}</p>}
         <header className="admin-topbar">
           <div>
             <span className="kicker">Admin</span>
             <h1>운영 관리</h1>
-            <p>Littly 승인, 결제, 팬 회원가입, 인플러언서 가입리스트를 한 번에 관리합니다.</p>
+            <p>회원, 결제, DM 알림, 정산 상태를 한 화면에서 확인하고 처리합니다.</p>
           </div>
           <label className="admin-search">
             <Search size={16} />
@@ -2308,6 +2307,14 @@ function Admin({
             <WalletCards />
           </article>
         </div>
+
+        <section className="admin-pg-strip" aria-label="결제 PG 연결 상태">
+          {(['LITTLY', 'EXIMBAY'] as const).map(key => {
+            const provider = pgStatus?.providers?.[key];
+            const label = key === 'LITTLY' ? 'Littly' : 'Eximbay';
+            return <article className={`admin-pg-card ${provider?.ready ? 'ready' : ''}`} key={key}><div className="admin-pg-icon"><CreditCard size={19} /></div><div><span>{label}</span><b>{provider?.ready ? '연결됨' : '설정 필요'}</b><small>{provider?.mode || '상태 확인 중'} · {provider?.message || 'PG 상태를 불러오는 중입니다.'}</small></div><i aria-label={`${label} ${provider?.ready ? '연결됨' : '설정 필요'}`} /></article>;
+          })}
+        </section>
 
         <div className="admin-grid">
           {(showDashboard || section === 'settings' || section === 'settlement') && (
@@ -2366,7 +2373,7 @@ function Admin({
                 <span className="kicker">결제 관리</span>
                 <h2>결제 및 정산 리스트</h2>
               </div>
-              <span className="admin-badge">Littly</span>
+              <span className="admin-badge">Littly · Eximbay</span>
             </div>
             <PaymentTable supports={paymentRows} />
           </section>
